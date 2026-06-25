@@ -1,33 +1,189 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>予約 | <%= user.code %></title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a1a; font-size: 14px; }
-    .header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
-    .header h1 { font-size: 16px; font-weight: 600; }
-    .badge { background: #e8f5ee; color: #2d7a4f; border-radius: 6px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
-    .spacer { flex: 1; }
-    .logout-btn { padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 13px; cursor: pointer; }
-    .content { padding: 20px; max-width: 900px; margin: 0 auto; }
-    .notice { background: #e8f5ee; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; font-size: 14px; color: #2d7a4f; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>予約 | <%= user.code %></title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px}
+.header{background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.header h1{font-size:16px;font-weight:600}
+.badge{background:#e8f5ee;color:#2d7a4f;border-radius:6px;padding:4px 12px;font-size:13px;font-weight:600}
+.header input[type=date]{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.header button.day{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;font-size:13px;cursor:pointer}
+.header select{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.spacer{flex:1}
+.logout-btn{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;color:#666}
+.main{display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px;height:calc(100vh - 57px)}
+.panel{background:#fff;border-radius:10px;border:1px solid #e5e7eb;display:flex;flex-direction:column;overflow:hidden}
+.panel-header{padding:12px 16px;border-bottom:1px solid #e5e7eb;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.panel-header .count{font-size:12px;color:#888;font-weight:400}
+.timeline-list{flex:1;overflow-y:auto}
+.timeline-item{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #f0f0f0;gap:8px}
+.t-time{font-size:15px;font-weight:700;min-width:48px}
+.t-room{background:#e8f5ee;color:#2d7a4f;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:600;min-width:36px;text-align:center}
+.t-course{color:#555;font-size:13px;min-width:38px}
+.t-del{color:#c0392b;font-size:12px;cursor:pointer;border:none;background:none;padding:2px 6px;border-radius:4px;margin-left:auto}
+.t-del:hover{background:#fef2f2}
+.empty-msg{padding:32px;text-align:center;color:#aaa;font-size:13px}
+.grid-scroll{flex:1;overflow:auto;padding:8px}
+.store-block{margin-bottom:20px}
+.store-title{font-size:14px;font-weight:600;color:#2d7a4f;padding:6px 4px}
+.grid{border-collapse:collapse;width:100%;min-width:300px}
+.grid th{position:sticky;top:0;background:#fff;z-index:10;padding:6px 10px;font-size:12px;font-weight:600;color:#555;border-bottom:2px solid #e5e7eb;text-align:center;white-space:nowrap}
+.grid th:first-child{background:#f9f9f9}
+.grid td{padding:0;border:1px solid #f0f0f0;text-align:center;height:32px;min-width:64px}
+.grid td:first-child{padding:2px 10px;font-size:11px;color:#888;background:#f9f9f9;white-space:nowrap;position:sticky;left:0}
+.cell-free{background:#fff;cursor:pointer}
+.cell-free:hover{background:#e8f5ee}
+.cell-booked{background:#fde8e8}
+.cell-mine{background:#d4f4dd}
+.cell-cleaning{background:#eee}
+.cell-label{font-size:11px;font-weight:600}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:440px}
+.modal h2{font-size:16px;font-weight:600;margin-bottom:4px}
+.modal .msub{font-size:12px;color:#888;margin-bottom:16px}
+.form-row{display:flex;gap:12px;margin-bottom:14px}
+.form-group{flex:1}
+.form-group label{display:block;font-size:12px;color:#666;margin-bottom:5px}
+.form-group input,.form-group select{width:100%;padding:9px;border:1px solid #ddd;border-radius:7px;font-size:14px}
+.course-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.course-btn{padding:10px 4px;border:1px solid #ddd;border-radius:7px;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer}
+.course-btn.active{background:#2d7a4f;color:#fff;border-color:#2d7a4f}
+.modal-actions{display:flex;gap:10px;margin-top:18px}
+.btn-primary{flex:1;padding:11px;background:#2d7a4f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+.btn-cancel{padding:11px 20px;background:#f5f5f5;border:1px solid #ddd;border-radius:8px;font-size:14px;cursor:pointer}
+.error-msg{color:#c0392b;font-size:12px;margin-top:6px;display:none}
+@media(max-width:768px){.main{grid-template-columns:1fr;grid-template-rows:auto 1fr}.panel.timeline{max-height:260px}}
+</style>
 </head>
 <body>
-  <div class="header">
-    <h1>予約管理</h1>
-    <span class="badge"><%= user.code %></span>
-    <div class="spacer"></div>
-    <form action="/logout" method="GET" style="margin:0">
-      <button class="logout-btn" type="submit">ログアウト</button>
-    </form>
-  </div>
-  <div class="content">
-    <div class="notice">ログイン中: <%= user.code %> — 空きグリッドをクリックして予約を追加できます</div>
-    <p style="color:#888;font-size:13px">（提携先ダッシュボードは Phase 4 で実装します）</p>
-  </div>
+<div class="header">
+<h1>予約</h1>
+<span class="badge"><%= user.code %></span>
+<input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
+<button class="day" onclick="setToday()">今日</button>
+<button class="day" onclick="setYesterday()">昨日</button>
+<select id="storeFilter" onchange="load()">
+<option value="">全店舗</option>
+<% stores.forEach(s=>{ %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
+</select>
+<div class="spacer"></div>
+<form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
+</div>
+<div class="main">
+<div class="panel timeline">
+<div class="panel-header"><span>自分の予約</span><span class="count" id="cnt">0件</span></div>
+<div class="timeline-list" id="list"><div class="empty-msg">予約はありません</div></div>
+</div>
+<div class="panel">
+<div class="panel-header"><span>空き状況</span><span class="count">空きをクリックで予約</span></div>
+<div class="grid-scroll" id="grids"></div>
+</div>
+</div>
+<div class="modal-overlay" id="mo">
+<div class="modal">
+<h2>予約追加</h2>
+<p class="msub" id="msub">名前: <%= user.code %>（自動）</p>
+<div class="form-row">
+<div class="form-group"><label>部屋</label><select id="mRoom"></select></div>
+<div class="form-group"><label>開始時刻</label><input type="time" id="mTime"></div>
+</div>
+<div class="form-group" style="margin-bottom:14px">
+<label>コース時間</label>
+<div class="course-btns" id="cbtns"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;color:#666">手入力:</span>
+<input type="number" id="cManual" placeholder="分" min="5" step="5" style="width:74px;padding:7px;border:1px solid #ddd;border-radius:6px">
+<span style="font-size:12px;color:#666">分</span>
+</div>
+</div>
+<div class="error-msg" id="err"></div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeM()">キャンセル</button>
+<button class="btn-primary" onclick="submitB()">予約追加</button>
+</div>
+</div>
+</div>
+<script>
+const stores=<%- JSON.stringify(stores) %>;
+const allRooms=<%- JSON.stringify(rooms) %>;
+const durations=<%- JSON.stringify(durations) %>;
+let selCourse=null;
+let curDate=document.getElementById('dateInput').value;
+document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.target.value;load();});
+function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
+function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
+function visibleStores(){const f=document.getElementById('storeFilter').value;return f?stores.filter(s=>s.id==f):stores;}
+function roomsOf(sid){return allRooms.filter(r=>r.store_id==sid);}
+async function load(){
+const f=document.getElementById('storeFilter').value;
+const url=f?`/api/bookings?date=${curDate}&store_id=${f}`:`/api/bookings?date=${curDate}`;
+const res=await fetch(url);const bk=await res.json();
+renderList(bk);renderGrids(bk);
+}
+function renderList(bk){
+const mine=bk.filter(b=>!b.is_other);
+document.getElementById('cnt').textContent=mine.length+'件';
+if(!mine.length){document.getElementById('list').innerHTML='<div class="empty-msg">予約はありません</div>';return;}
+const s=[...mine].sort((a,b)=>a.start_at.localeCompare(b.start_at));
+document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分</span><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;}).join('');
+}
+function renderGrids(bk){
+const map={};allRooms.forEach(r=>map[r.id]=[]);
+bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes,mine:!b.is_other});}});
+let html='';
+visibleStores().forEach(store=>{
+const rms=roomsOf(store.id);
+if(!rms.length)return;
+html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}</th>`).join('')}</tr></thead><tbody>`;
+for(let h=10;h<34;h++){for(let m=0;m<60;m+=30){
+const tot=h*60+m;const dh=h>=24?h-24:h;
+const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+html+=`<tr><td>${lb}</td>`;
+rms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='mine')html+=`<td class="cell-mine"><span class="cell-label" style="color:#2d7a4f">自</span></td>`;else if(st==='booked')html+=`<td class="cell-booked"><span class="cell-label" style="color:#c0392b">×</span></td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+html+=`</tr>`;
+}}
+html+=`</tbody></table></div>`;
+});
+document.getElementById('grids').innerHTML=html||'<div class="empty-msg">部屋がありません</div>';
+}
+function cellStatus(bs,slot){for(const b of bs){if(slot>=b.start&&slot<b.course)return b.mine?'mine':'booked';if(slot>=b.course&&slot<b.end)return 'cleaning';}return 'free';}
+function tm(s){const[h,m]=s.split(':').map(Number);return h*60+m;}
+function openM(rid,time){
+const room=allRooms.find(r=>r.id==rid);
+const sameStore=roomsOf(room.store_id);
+document.getElementById('mRoom').innerHTML=sameStore.map(r=>`<option value="${r.id}" ${r.id==rid?'selected':''}>${r.name}</option>`).join('');
+document.getElementById('msub').textContent='名前: '+'<%= user.code %>'+'（自動） / '+room.store_name;
+document.getElementById('mTime').value=time;
+document.getElementById('cbtns').innerHTML=durations.map(d=>`<button class="course-btn" onclick="selC(this,${d.minutes})">${d.minutes}分</button>`).join('');
+selCourse=null;document.getElementById('cManual').value='';
+document.getElementById('err').style.display='none';
+document.getElementById('mo').classList.add('open');
+}
+function selC(btn,min){document.querySelectorAll('.course-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');selCourse=min;document.getElementById('cManual').value='';}
+function closeM(){document.getElementById('mo').classList.remove('open');}
+async function submitB(){
+const room_id=document.getElementById('mRoom').value;
+const time=document.getElementById('mTime').value;
+const man=parseInt(document.getElementById('cManual').value);
+let course_minutes;
+if(selCourse)course_minutes=selCourse;
+else if(!isNaN(man)&&man>0)course_minutes=man;
+else{showErr('コース時間を選んでください');return;}
+const start_at=`${curDate}T${time}`;
+const res=await fetch('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({room_id,start_at,course_minutes})});
+const d=await res.json();
+if(!res.ok){showErr(d.error);return;}
+closeM();load();
+}
+async function delB(id){if(!confirm('削除しますか？'))return;await fetch(`/api/bookings/${id}`,{method:'DELETE'});load();}
+function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
+document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
+load();setInterval(load,30000);
+</script>
 </body>
 </html>

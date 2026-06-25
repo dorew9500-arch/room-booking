@@ -1,92 +1,92 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>部屋管理</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a1a; font-size: 14px; }
-    .header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
-    .header h1 { font-size: 16px; font-weight: 600; }
-    .header a { font-size: 13px; color: #2d7a4f; text-decoration: none; }
-    .spacer { flex: 1; }
-    .logout-btn { padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 13px; cursor: pointer; }
-    .content { padding: 20px; max-width: 600px; margin: 0 auto; }
-    .card { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; padding: 20px; margin-bottom: 16px; }
-    .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
-    .add-row { display: flex; gap: 10px; }
-    .add-row input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 7px; font-size: 14px; }
-    .btn-primary { padding: 8px 20px; background: #2d7a4f; color: #fff; border: none; border-radius: 7px; font-size: 14px; cursor: pointer; }
-    .room-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; gap: 10px; }
-    .room-item:last-child { border-bottom: none; }
-    .room-name { font-size: 15px; font-weight: 500; flex: 1; }
-    .status-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
-    .status-active { background: #e8f5ee; color: #2d7a4f; }
-    .status-inactive { background: #f5f5f5; color: #aaa; }
-    .btn-sm { padding: 5px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; cursor: pointer; background: #f5f5f5; }
-    .btn-danger { border-color: #fde8e8; background: #fde8e8; color: #c0392b; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>部屋管理</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px}
+.header{background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 20px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:16px;font-weight:600}
+.header a{font-size:13px;color:#2d7a4f;text-decoration:none}
+.spacer{flex:1}
+.logout-btn{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;cursor:pointer}
+.content{padding:20px;max-width:640px;margin:0 auto}
+.card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:20px;margin-bottom:16px}
+.card h2{font-size:14px;font-weight:600;margin-bottom:16px}
+.add-row{display:flex;gap:10px}
+.add-row select,.add-row input{padding:8px 12px;border:1px solid #ddd;border-radius:7px;font-size:14px}
+.add-row input{flex:1}
+.btn-primary{padding:8px 20px;background:#2d7a4f;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer}
+.store-group{margin-bottom:18px}
+.store-group-title{font-size:13px;font-weight:600;color:#2d7a4f;margin-bottom:8px}
+.room-item{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;gap:10px}
+.room-item:last-child{border-bottom:none}
+.room-name{font-size:15px;font-weight:500;flex:1}
+.status-badge{font-size:11px;padding:2px 8px;border-radius:4px}
+.status-active{background:#e8f5ee;color:#2d7a4f}
+.status-inactive{background:#f5f5f5;color:#aaa}
+.btn-sm{padding:5px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#f5f5f5}
+.btn-danger{border-color:#fde8e8;background:#fde8e8;color:#c0392b}
+</style>
 </head>
 <body>
-  <div class="header">
-    <h1>部屋管理</h1>
-    <a href="/admin">← 受付画面に戻る</a>
-    <div class="spacer"></div>
-    <form action="/logout" method="GET" style="margin:0">
-      <button class="logout-btn" type="submit">ログアウト</button>
-    </form>
-  </div>
-  <div class="content">
-    <div class="card">
-      <h2>部屋を追加</h2>
-      <div class="add-row">
-        <input type="text" id="newRoomName" placeholder="部屋番号（例: 604）">
-        <button class="btn-primary" onclick="addRoom()">追加</button>
-      </div>
-    </div>
-    <div class="card">
-      <h2>部屋一覧</h2>
-      <div id="roomList"></div>
-    </div>
-  </div>
-
-  <script>
-    async function loadRooms() {
-      const res = await fetch('/api/admin/rooms');
-      const rooms = await res.json();
-      document.getElementById('roomList').innerHTML = rooms.map(r => `
-        <div class="room-item">
-          <span class="room-name">${r.name}</span>
-          <span class="status-badge ${r.is_active ? 'status-active' : 'status-inactive'}">${r.is_active ? '有効' : '無効'}</span>
-          <button class="btn-sm" onclick="toggleRoom(${r.id}, ${r.is_active})">${r.is_active ? '無効化' : '有効化'}</button>
-          <button class="btn-sm btn-danger" onclick="deleteRoom(${r.id})">削除</button>
-        </div>
-      `).join('') || '<p style="color:#aaa;font-size:13px">部屋がありません</p>';
-    }
-
-    async function addRoom() {
-      const name = document.getElementById('newRoomName').value.trim();
-      if (!name) return alert('部屋番号を入力してください');
-      const res = await fetch('/api/admin/rooms', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
-      const data = await res.json();
-      if (!res.ok) return alert(data.error);
-      document.getElementById('newRoomName').value = '';
-      loadRooms();
-    }
-
-    async function toggleRoom(id, current) {
-      await fetch(`/api/admin/rooms/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ is_active: current ? 0 : 1 }) });
-      loadRooms();
-    }
-
-    async function deleteRoom(id) {
-      if (!confirm('削除しますか？予約がある場合は非表示になります。')) return;
-      await fetch(`/api/admin/rooms/${id}`, { method: 'DELETE' });
-      loadRooms();
-    }
-
-    loadRooms();
-  </script>
+<div class="header">
+<h1>部屋管理</h1>
+<a href="/admin">← 受付画面に戻る</a>
+<div class="spacer"></div>
+<form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
+</div>
+<div class="content">
+<div class="card">
+<h2>部屋を追加</h2>
+<div class="add-row">
+<select id="storeSel"></select>
+<input type="text" id="newName" placeholder="部屋番号（例: 604）">
+<button class="btn-primary" onclick="addRoom()">追加</button>
+</div>
+</div>
+<div class="card">
+<h2>部屋一覧</h2>
+<div id="list"></div>
+</div>
+</div>
+<script>
+let stores=[];
+async function loadAll(){
+const sres=await fetch('/api/admin/stores');stores=await sres.json();
+document.getElementById('storeSel').innerHTML=stores.filter(s=>s.is_active).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+const rres=await fetch('/api/admin/rooms');const rooms=await rres.json();
+const byStore={};
+rooms.forEach(r=>{(byStore[r.store_id]=byStore[r.store_id]||[]).push(r);});
+let html='';
+stores.forEach(s=>{
+const rms=byStore[s.id]||[];
+if(!rms.length)return;
+html+=`<div class="store-group"><div class="store-group-title">${s.name}</div>`;
+html+=rms.map(r=>`
+<div class="room-item">
+<span class="room-name">${r.name}</span>
+<span class="status-badge ${r.is_active?'status-active':'status-inactive'}">${r.is_active?'有効':'無効'}</span>
+<button class="btn-sm" onclick="toggleRoom(${r.id},${r.is_active})">${r.is_active?'無効化':'有効化'}</button>
+<button class="btn-sm btn-danger" onclick="delRoom(${r.id})">削除</button>
+</div>`).join('');
+html+='</div>';
+});
+document.getElementById('list').innerHTML=html||'<p style="color:#aaa;font-size:13px">部屋がありません</p>';
+}
+async function addRoom(){
+const store_id=document.getElementById('storeSel').value;
+const name=document.getElementById('newName').value.trim();
+if(!store_id||!name)return alert('店舗と部屋番号を入力してください');
+await fetch('/api/admin/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id,name})});
+document.getElementById('newName').value='';
+loadAll();
+}
+async function toggleRoom(id,cur){await fetch('/api/admin/rooms/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:cur?0:1})});loadAll();}
+async function delRoom(id){if(!confirm('削除しますか？予約がある場合は非表示になります'))return;await fetch('/api/admin/rooms/'+id,{method:'DELETE'});loadAll();}
+loadAll();
+</script>
 </body>
 </html>

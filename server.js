@@ -27,6 +27,7 @@ async function start() {
 
   app.use('/', require('./routes/auth'));
   app.use('/admin', require('./routes/admin'));
+  app.use('/reception', require('./routes/reception'));
   app.use('/partner', require('./routes/partner'));
   app.use('/api', require('./routes/api'));
 

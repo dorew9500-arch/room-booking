@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>提携先管理</title>
+  <title>名前管理</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a1a; font-size: 14px; }
@@ -34,7 +34,7 @@
 </head>
 <body>
   <div class="header">
-    <h1>提携先管理</h1>
+    <h1>名前管理</h1>
     <a href="/admin">← 受付画面に戻る</a>
     <div class="spacer"></div>
     <form action="/logout" method="GET" style="margin:0">
@@ -43,15 +43,15 @@
   </div>
   <div class="content">
     <div class="card">
-      <h2>提携先を追加</h2>
-      <p class="notice">コード（A/B/C）は予約画面に表示されます。実店名は管理者のみ確認できます。</p>
+      <h2>名前を追加</h2>
+      <p class="notice">コード（A/B/C）は予約画面に表示されます。名前は管理者のみ確認できます。</p>
       <div class="form-grid">
         <div class="form-group">
           <label>コード（A/B/Cなど）</label>
           <input type="text" id="newCode" placeholder="A">
         </div>
         <div class="form-group">
-          <label>実店名（管理者のみ表示）</label>
+          <label>名前（管理者のみ表示）</label>
           <input type="text" id="newName" placeholder="○○店">
         </div>
         <div class="form-group">
@@ -67,7 +67,7 @@
     </div>
 
     <div class="card">
-      <h2>提携先一覧</h2>
+      <h2>名前一覧</h2>
       <div id="partnerList"></div>
     </div>
   </div>
@@ -86,7 +86,7 @@
           <button class="btn-sm" onclick="resetPassword(${p.id})">PW変更</button>
           <button class="btn-sm btn-danger" onclick="deletePartner(${p.id})">削除</button>
         </div>
-      `).join('') || '<p style="color:#aaa;font-size:13px">提携先がありません</p>';
+      `).join('') || '<p style="color:#aaa;font-size:13px">名前が登録されていません</p>';
     }
 
     async function addPartner() {

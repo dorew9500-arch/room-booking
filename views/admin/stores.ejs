@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>店舗管理</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px}
+.header{background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 20px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:16px;font-weight:600}
+.header a{font-size:13px;color:#2d7a4f;text-decoration:none}
+.spacer{flex:1}
+.logout-btn{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;cursor:pointer}
+.content{padding:20px;max-width:760px;margin:0 auto}
+.card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:20px;margin-bottom:16px}
+.card h2{font-size:14px;font-weight:600;margin-bottom:16px}
+.notice{font-size:12px;color:#888;margin-bottom:14px;background:#f9f9f9;padding:10px 14px;border-radius:8px}
+.form-grid{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px}
+.form-group label{display:block;font-size:12px;color:#666;margin-bottom:4px}
+.form-group input,.form-group select{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px}
+.btn-primary{padding:8px 20px;background:#2d7a4f;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer}
+.store-item{display:flex;align-items:center;padding:12px 0;border-bottom:1px solid #f0f0f0;gap:12px;flex-wrap:wrap}
+.store-item:last-child{border-bottom:none}
+.s-name{font-size:15px;font-weight:600;flex:1}
+.s-clean{font-size:13px;color:#555;display:flex;align-items:center;gap:6px}
+.s-clean input{width:54px;padding:5px;border:1px solid #ddd;border-radius:5px;font-size:13px;text-align:center}
+.status-badge{font-size:11px;padding:2px 8px;border-radius:4px}
+.status-active{background:#e8f5ee;color:#2d7a4f}
+.status-inactive{background:#f5f5f5;color:#aaa}
+.btn-sm{padding:5px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#f5f5f5}
+.btn-danger{border-color:#fde8e8;background:#fde8e8;color:#c0392b}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>店舗管理</h1>
+<a href="/admin">← 受付画面に戻る</a>
+<div class="spacer"></div>
+<form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
+</div>
+<div class="content">
+<div class="card">
+<h2>店舗を追加</h2>
+<p class="notice">清掃時間（インターバル）はその店舗の全部屋に適用され、コース時間に自動で加算されます。</p>
+<div class="form-grid">
+<div class="form-group"><label>店舗名</label><input type="text" id="newName" placeholder="例: フィジー"></div>
+<div class="form-group"><label>清掃時間（分）</label><input type="number" id="newClean" value="5" min="0" step="5"></div>
+</div>
+<button class="btn-primary" onclick="addStore()">追加</button>
+</div>
+<div class="card">
+<h2>店舗一覧</h2>
+<div id="list"></div>
+</div>
+<div class="card">
+<h2>受付アカウント</h2>
+<p class="notice">店舗ごとに受付ログインを作ります。受付はログインした店舗だけ操作できます。</p>
+<div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
+<div class="form-group"><label>店舗</label><select id="recStore"></select></div>
+<div class="form-group"><label>ログインID</label><input type="text" id="recId" placeholder="fiji_uketsuke"></div>
+<div class="form-group"><label>パスワード</label><input type="password" id="recPw" placeholder="パスワード"></div>
+</div>
+<button class="btn-primary" onclick="addReception()">受付追加</button>
+<div id="recList" style="margin-top:16px"></div>
+</div>
+</div>
+<script>
+async function loadStores(){
+const res=await fetch('/api/admin/stores');const stores=await res.json();
+document.getElementById('list').innerHTML=stores.map(s=>`
+<div class="store-item">
+<span class="s-name">${s.name}</span>
+<span class="s-clean">清掃 <input type="number" value="${s.cleaning_minutes}" min="0" step="5" id="clean_${s.id}"> 分 <button class="btn-sm" onclick="saveClean(${s.id})">保存</button></span>
+<span class="status-badge ${s.is_active?'status-active':'status-inactive'}">${s.is_active?'有効':'無効'}</span>
+<button class="btn-sm" onclick="toggleStore(${s.id},${s.is_active})">${s.is_active?'無効化':'有効化'}</button>
+<button class="btn-sm btn-danger" onclick="delStore(${s.id})">削除</button>
+</div>`).join('')||'<p style="color:#aaa;font-size:13px">店舗がありません</p>';
+document.getElementById('recStore').innerHTML=stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+async function addStore(){
+const name=document.getElementById('newName').value.trim();
+const cleaning_minutes=parseInt(document.getElementById('newClean').value)||0;
+if(!name)return alert('店舗名を入力してください');
+await fetch('/api/admin/stores',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,cleaning_minutes})});
+document.getElementById('newName').value='';document.getElementById('newClean').value='5';
+loadStores();
+}
+async function saveClean(id){
+const v=parseInt(document.getElementById('clean_'+id).value)||0;
+await fetch('/api/admin/stores/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({cleaning_minutes:v})});
+alert('清掃時間を保存しました');
+}
+async function toggleStore(id,cur){await fetch('/api/admin/stores/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:cur?0:1})});loadStores();}
+async function delStore(id){if(!confirm('削除しますか？部屋がある場合は非表示になります'))return;await fetch('/api/admin/stores/'+id,{method:'DELETE'});loadStores();}
+async function loadReceptions(){
+const res=await fetch('/api/admin/receptions');const rc=await res.json();
+document.getElementById('recList').innerHTML=rc.map(r=>`
+<div class="store-item">
+<span class="s-name">${r.store_name}</span>
+<span class="s-clean">ID: ${r.login_id}</span>
+<span class="status-badge ${r.is_active?'status-active':'status-inactive'}">${r.is_active?'有効':'無効'}</span>
+<button class="btn-sm" onclick="resetRecPw(${r.id})">PW変更</button>
+<button class="btn-sm btn-danger" onclick="delRec(${r.id})">削除</button>
+</div>`).join('')||'<p style="color:#aaa;font-size:13px">受付アカウントがありません</p>';
+}
+async function addReception(){
+const store_id=document.getElementById('recStore').value;
+const login_id=document.getElementById('recId').value.trim();
+const password=document.getElementById('recPw').value;
+if(!store_id||!login_id||!password)return alert('すべて入力してください');
+const res=await fetch('/api/admin/receptions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({store_id,login_id,password})});
+const d=await res.json();
+if(!res.ok)return alert(d.error);
+document.getElementById('recId').value='';document.getElementById('recPw').value='';
+loadReceptions();
+}
+async function resetRecPw(id){const pw=prompt('新しいパスワード');if(!pw)return;await fetch('/api/admin/receptions/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});alert('変更しました');}
+async function delRec(id){if(!confirm('削除しますか？'))return;await fetch('/api/admin/receptions/'+id,{method:'DELETE'});loadReceptions();}
+loadStores();loadReceptions();
+</script>
+</body>
+</html>
