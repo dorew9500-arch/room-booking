@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>予約 | <%= user.code %></title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a1a; font-size: 14px; }
+    .header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .badge { background: #e8f5ee; color: #2d7a4f; border-radius: 6px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+    .spacer { flex: 1; }
+    .logout-btn { padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 13px; cursor: pointer; }
+    .content { padding: 20px; max-width: 900px; margin: 0 auto; }
+    .notice { background: #e8f5ee; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; font-size: 14px; color: #2d7a4f; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>予約管理</h1>
+    <span class="badge"><%= user.code %></span>
+    <div class="spacer"></div>
+    <form action="/logout" method="GET" style="margin:0">
+      <button class="logout-btn" type="submit">ログアウト</button>
+    </form>
+  </div>
+  <div class="content">
+    <div class="notice">ログイン中: <%= user.code %> — 空きグリッドをクリックして予約を追加できます</div>
+    <p style="color:#888;font-size:13px">（提携先ダッシュボードは Phase 4 で実装します）</p>
+  </div>
+</body>
+</html>

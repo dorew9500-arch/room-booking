@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>提携先管理</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a1a; font-size: 14px; }
+    .header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .header a { font-size: 13px; color: #2d7a4f; text-decoration: none; }
+    .spacer { flex: 1; }
+    .logout-btn { padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 13px; cursor: pointer; }
+    .content { padding: 20px; max-width: 700px; margin: 0 auto; }
+    .card { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; padding: 20px; margin-bottom: 16px; }
+    .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+    .form-group input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 7px; font-size: 14px; }
+    .btn-primary { padding: 8px 20px; background: #2d7a4f; color: #fff; border: none; border-radius: 7px; font-size: 14px; cursor: pointer; }
+    .partner-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; gap: 10px; flex-wrap: wrap; }
+    .partner-item:last-child { border-bottom: none; }
+    .p-code { font-size: 16px; font-weight: 700; color: #2d7a4f; min-width: 30px; }
+    .p-name { font-size: 13px; color: #555; flex: 1; }
+    .p-id { font-size: 12px; color: #aaa; }
+    .status-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+    .status-active { background: #e8f5ee; color: #2d7a4f; }
+    .status-inactive { background: #f5f5f5; color: #aaa; }
+    .btn-sm { padding: 5px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; cursor: pointer; background: #f5f5f5; }
+    .btn-danger { border-color: #fde8e8; background: #fde8e8; color: #c0392b; }
+    .notice { font-size: 12px; color: #888; margin-bottom: 16px; background: #f9f9f9; padding: 10px 14px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>提携先管理</h1>
+    <a href="/admin">← 受付画面に戻る</a>
+    <div class="spacer"></div>
+    <form action="/logout" method="GET" style="margin:0">
+      <button class="logout-btn" type="submit">ログアウト</button>
+    </form>
+  </div>
+  <div class="content">
+    <div class="card">
+      <h2>提携先を追加</h2>
+      <p class="notice">コード（A/B/C）は予約画面に表示されます。実店名は管理者のみ確認できます。</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>コード（A/B/Cなど）</label>
+          <input type="text" id="newCode" placeholder="A">
+        </div>
+        <div class="form-group">
+          <label>実店名（管理者のみ表示）</label>
+          <input type="text" id="newName" placeholder="○○店">
+        </div>
+        <div class="form-group">
+          <label>ログインID</label>
+          <input type="text" id="newLoginId" placeholder="storeA">
+        </div>
+        <div class="form-group">
+          <label>パスワード</label>
+          <input type="password" id="newPassword" placeholder="パスワード">
+        </div>
+      </div>
+      <button class="btn-primary" onclick="addPartner()">追加</button>
+    </div>
+
+    <div class="card">
+      <h2>提携先一覧</h2>
+      <div id="partnerList"></div>
+    </div>
+  </div>
+
+  <script>
+    async function loadPartners() {
+      const res = await fetch('/api/admin/partners');
+      const partners = await res.json();
+      document.getElementById('partnerList').innerHTML = partners.map(p => `
+        <div class="partner-item">
+          <span class="p-code">${p.code}</span>
+          <span class="p-name">${p.name}</span>
+          <span class="p-id">ID: ${p.login_id}</span>
+          <span class="status-badge ${p.is_active ? 'status-active' : 'status-inactive'}">${p.is_active ? '有効' : '無効'}</span>
+          <button class="btn-sm" onclick="togglePartner(${p.id}, ${p.is_active})">${p.is_active ? '無効化' : '有効化'}</button>
+          <button class="btn-sm" onclick="resetPassword(${p.id})">PW変更</button>
+          <button class="btn-sm btn-danger" onclick="deletePartner(${p.id})">削除</button>
+        </div>
+      `).join('') || '<p style="color:#aaa;font-size:13px">提携先がありません</p>';
+    }
+
+    async function addPartner() {
+      const code = document.getElementById('newCode').value.trim();
+      const name = document.getElementById('newName').value.trim();
+      const login_id = document.getElementById('newLoginId').value.trim();
+      const password = document.getElementById('newPassword').value;
+      if (!code || !name || !login_id || !password) return alert('すべて入力してください');
+      const res = await fetch('/api/admin/partners', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ code, name, login_id, password }) });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error);
+      document.getElementById('newCode').value = '';
+      document.getElementById('newName').value = '';
+      document.getElementById('newLoginId').value = '';
+      document.getElementById('newPassword').value = '';
+      loadPartners();
+    }
+
+    async function togglePartner(id, current) {
+      await fetch(`/api/admin/partners/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ is_active: current ? 0 : 1 }) });
+      loadPartners();
+    }
+
+    async function resetPassword(id) {
+      const pw = prompt('新しいパスワードを入力してください');
+      if (!pw) return;
+      await fetch(`/api/admin/partners/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) });
+      alert('パスワードを変更しました');
+    }
+
+    async function deletePartner(id) {
+      if (!confirm('削除しますか？')) return;
+      await fetch(`/api/admin/partners/${id}`, { method: 'DELETE' });
+      loadPartners();
+    }
+
+    loadPartners();
+  </script>
+</body>
+</html>

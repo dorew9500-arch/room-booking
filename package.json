@@ -1,0 +1,25 @@
+{
+  "name": "room-booking",
+  "version": "1.0.0",
+  "description": "レンタルルーム予約管理システム",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^9.6.0",
+    "better-sqlite3-session-store": "^0.1.0",
+    "connect-sqlite3": "^0.9.14",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.9",
+    "express": "^4.19.2",
+    "express-session": "^1.19.0",
+    "memorystore": "^1.6.8",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

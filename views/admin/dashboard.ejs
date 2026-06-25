@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>予約管理 - 受付</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a1a; font-size: 14px; }
+
+    /* ヘッダー */
+    .header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .header h1 { font-size: 16px; font-weight: 600; color: #1a1a1a; margin-right: 8px; }
+    .header input[type=date] { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+    .header button { padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px; background: #f5f5f5; font-size: 13px; cursor: pointer; }
+    .header button:hover { background: #e8e8e8; }
+    .header .spacer { flex: 1; }
+    .header .nav-links { display: flex; gap: 8px; }
+    .header .nav-links a { font-size: 13px; color: #2d7a4f; text-decoration: none; padding: 6px 12px; border: 1px solid #2d7a4f; border-radius: 6px; }
+    .header .nav-links a:hover { background: #f0faf5; }
+    .logout-btn { padding: 6px 14px; border: 1px solid #ddd; border-radius: 6px; background: #fff; font-size: 13px; cursor: pointer; color: #666; }
+
+    /* メインレイアウト */
+    .main { display: grid; grid-template-columns: 320px 1fr; gap: 12px; padding: 12px; height: calc(100vh - 57px); }
+
+    /* 左カラム：時系列リスト */
+    .timeline-panel { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
+    .panel-header .count { font-size: 12px; color: #888; font-weight: 400; }
+    .timeline-list { flex: 1; overflow-y: auto; }
+    .timeline-item { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f0f0f0; gap: 8px; }
+    .timeline-item:hover { background: #f9f9f9; }
+    .t-time { font-size: 15px; font-weight: 600; color: #1a1a1a; min-width: 48px; }
+    .t-room { background: #e8f5ee; color: #2d7a4f; border-radius: 5px; padding: 2px 8px; font-size: 12px; font-weight: 600; min-width: 36px; text-align: center; }
+    .t-duration { color: #555; font-size: 13px; min-width: 40px; }
+    .t-name { color: #333; font-size: 13px; flex: 1; }
+    .t-del { color: #c0392b; font-size: 12px; cursor: pointer; border: none; background: none; padding: 2px 6px; border-radius: 4px; }
+    .t-del:hover { background: #fef2f2; }
+    .empty-msg { padding: 32px 16px; text-align: center; color: #aaa; font-size: 13px; }
+
+    /* 右カラム：空きグリッド */
+    .grid-panel { background: #fff; border-radius: 10px; border: 1px solid #e5e7eb; display: flex; flex-direction: column; overflow: hidden; }
+    .grid-scroll { flex: 1; overflow: auto; }
+    .booking-grid { border-collapse: collapse; width: 100%; min-width: 400px; }
+    .booking-grid th { position: sticky; top: 0; background: #fff; z-index: 10; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #555; border-bottom: 2px solid #e5e7eb; text-align: center; white-space: nowrap; }
+    .booking-grid th:first-child { text-align: left; background: #f9f9f9; }
+    .booking-grid td { padding: 0; border: 1px solid #f0f0f0; text-align: center; width: 80px; height: 36px; }
+    .booking-grid td:first-child { padding: 4px 12px; font-size: 12px; color: #888; background: #f9f9f9; white-space: nowrap; position: sticky; left: 0; z-index: 5; }
+    .cell-free { background: #fff; cursor: pointer; transition: background 0.1s; }
+    .cell-free:hover { background: #e8f5ee; }
+    .cell-booked { background: #fde8e8; cursor: default; }
+    .cell-cleaning { background: #f0f0f0; cursor: default; }
+    .cell-label { font-size: 11px; color: #c0392b; font-weight: 500; }
+    .cell-clean-label { font-size: 10px; color: #aaa; }
+
+    /* モーダル */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 420px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+    .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+    .form-row { display: flex; gap: 12px; margin-bottom: 14px; }
+    .form-group { flex: 1; }
+    .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; }
+    .form-group input, .form-group select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 7px; font-size: 14px; color: #1a1a1a; outline: none; }
+    .form-group input:focus, .form-group select:focus { border-color: #2d7a4f; }
+    .dur-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .dur-btn { padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; background: #f5f5f5; font-size: 12px; cursor: pointer; white-space: nowrap; }
+    .dur-btn.active { background: #2d7a4f; color: #fff; border-color: #2d7a4f; }
+    .name-toggle { display: flex; gap: 12px; margin-bottom: 10px; }
+    .name-toggle label { display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+    .btn-primary { flex: 1; padding: 10px; background: #2d7a4f; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
+    .btn-primary:hover { background: #235f3d; }
+    .btn-cancel { padding: 10px 20px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    .error-msg { color: #c0392b; font-size: 12px; margin-top: 6px; display: none; }
+
+    @media (max-width: 768px) {
+      .main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      .timeline-panel { max-height: 280px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>予約管理</h1>
+  <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
+  <button onclick="setToday()">今日</button>
+  <button onclick="setYesterday()">昨日</button>
+  <div class="spacer"></div>
+  <div class="nav-links">
+    <a href="/admin/rooms">部屋管理</a>
+    <a href="/admin/partners">提携先管理</a>
+  </div>
+  <form action="/logout" method="GET" style="margin:0">
+    <button class="logout-btn" type="submit">ログアウト</button>
+  </form>
+</div>
+
+<div class="main">
+
+  <!-- 左：時系列リスト -->
+  <div class="timeline-panel">
+    <div class="panel-header">
+      <span>本日の予約</span>
+      <span class="count" id="bookingCount">0件</span>
+    </div>
+    <div class="timeline-list" id="timelineList">
+      <div class="empty-msg">予約はありません</div>
+    </div>
+  </div>
+
+  <!-- 右：空きグリッド -->
+  <div class="grid-panel">
+    <div class="panel-header">
+      <span>空き状況</span>
+      <span class="count">クリックで予約追加</span>
+    </div>
+    <div class="grid-scroll">
+      <table class="booking-grid" id="bookingGrid">
+        <thead id="gridHead"></thead>
+        <tbody id="gridBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- 予約追加モーダル -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2>予約追加</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>部屋</label>
+        <select id="mRoom"></select>
+      </div>
+      <div class="form-group">
+        <label>開始時刻</label>
+        <input type="time" id="mTime">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label>利用時間</label>
+      <div class="dur-btns" id="durBtns"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <span style="font-size:12px;color:#666">手入力:</span>
+        <input type="number" id="mDurManual" placeholder="分" min="5" step="5" style="width:70px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+        <span style="font-size:12px;color:#666">分</span>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:6px">
+      <label>名前</label>
+      <div class="name-toggle">
+        <label><input type="radio" name="nameType" value="code" checked> コード選択</label>
+        <label><input type="radio" name="nameType" value="manual"> 手入力</label>
+      </div>
+      <select id="mPartnerCode" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px"></select>
+      <input type="text" id="mClientName" placeholder="客名・メモ" style="display:none;width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px">
+    </div>
+
+    <div class="error-msg" id="modalError"></div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-primary" onclick="submitBooking()">予約追加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const rooms = <%- JSON.stringify(rooms) %>;
+const partners = <%- JSON.stringify(partners) %>;
+const durations = <%- JSON.stringify(durations) %>;
+let selectedDuration = null;
+let currentDate = document.getElementById('dateInput').value;
+
+// 初期化
+document.getElementById('dateInput').addEventListener('change', e => {
+  currentDate = e.target.value;
+  loadData();
+});
+
+function setToday() {
+  currentDate = new Date().toISOString().slice(0, 10);
+  document.getElementById('dateInput').value = currentDate;
+  loadData();
+}
+
+function setYesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  currentDate = d.toISOString().slice(0, 10);
+  document.getElementById('dateInput').value = currentDate;
+  loadData();
+}
+
+// データ読み込み
+async function loadData() {
+  const res = await fetch(`/api/bookings?date=${currentDate}`);
+  const bookings = await res.json();
+  renderTimeline(bookings);
+  renderGrid(bookings);
+}
+
+// 時系列リスト描画
+function renderTimeline(bookings) {
+  const list = document.getElementById('timelineList');
+  document.getElementById('bookingCount').textContent = bookings.length + '件';
+
+  if (bookings.length === 0) {
+    list.innerHTML = '<div class="empty-msg">予約はありません</div>';
+    return;
+  }
+
+  const sorted = [...bookings].sort((a, b) => a.start_at.localeCompare(b.start_at));
+  list.innerHTML = sorted.map(b => {
+    const time = b.start_at.slice(11, 16);
+    const name = b.partner_code || b.client_name || '-';
+    const dur = b.actual_duration ? `${b.duration}分(実${b.actual_duration}分)` : `${b.duration}分`;
+    return `
+      <div class="timeline-item">
+        <span class="t-time">${time}</span>
+        <span class="t-room">${b.room_name}</span>
+        <span class="t-duration">${dur}</span>
+        <span class="t-name">${name}</span>
+        <button class="t-del" onclick="deleteBooking(${b.id})">削除</button>
+      </div>
+    `;
+  }).join('');
+}
+
+// グリッド描画
+function renderGrid(bookings) {
+  const head = document.getElementById('gridHead');
+  const body = document.getElementById('gridBody');
+
+  // ヘッダー（部屋名）
+  head.innerHTML = '<tr><th>時間</th>' + rooms.map(r => `<th>${r.name}</th>`).join('') + '</tr>';
+
+  // 予約マップ作成（room_id -> [{start, end}]）
+  const bookingMap = {};
+  rooms.forEach(r => bookingMap[r.id] = []);
+  bookings.forEach(b => {
+    if (bookingMap[b.room_id]) {
+      const start = timeToMin(b.start_at.slice(11, 16));
+      bookingMap[b.room_id].push({ start, end: start + b.duration });
+    }
+  });
+
+  // 10:00〜翌10:00を30分刻みで表示
+  const rows = [];
+  for (let h = 10; h < 34; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      const totalMin = h * 60 + m;
+      const displayH = h >= 24 ? h - 24 : h;
+      const label = `${String(displayH).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+
+      let cells = `<td>${label}</td>`;
+      rooms.forEach(r => {
+        const status = getCellStatus(bookingMap[r.id], totalMin);
+        if (status === 'booked') {
+          cells += `<td class="cell-booked"><span class="cell-label">×</span></td>`;
+        } else if (status === 'cleaning') {
+          cells += `<td class="cell-cleaning"><span class="cell-clean-label">清掃</span></td>`;
+        } else {
+          cells += `<td class="cell-free" onclick="openModal('${r.id}','${r.name}','${label}')"></td>`;
+        }
+      });
+      rows.push(`<tr>${cells}</tr>`);
+    }
+  }
+  body.innerHTML = rows.join('');
+}
+
+function getCellStatus(roomBookings, slotMin) {
+  for (const b of roomBookings) {
+    const cleanEnd = b.end; // durationに清掃含む
+    const useEnd = b.end - 5; // 実質利用終了
+    if (slotMin >= b.start && slotMin < useEnd) return 'booked';
+    if (slotMin >= useEnd && slotMin < cleanEnd) return 'cleaning';
+  }
+  return 'free';
+}
+
+function timeToMin(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// モーダル
+function openModal(roomId, roomName, time) {
+  // 部屋セレクト
+  const roomSel = document.getElementById('mRoom');
+  roomSel.innerHTML = rooms.map(r => `<option value="${r.id}" ${r.id == roomId ? 'selected' : ''}>${r.name}</option>`).join('');
+
+  // 時刻
+  document.getElementById('mTime').value = time;
+
+  // 利用時間ボタン
+  const durBtns = document.getElementById('durBtns');
+  durBtns.innerHTML = durations.map(d =>
+    `<button class="dur-btn" onclick="selectDur(this, ${d.duration}, ${d.actual_duration || 'null'})">${d.label}</button>`
+  ).join('');
+  selectedDuration = null;
+  document.getElementById('mDurManual').value = '';
+
+  // 提携先プルダウン
+  const codeSel = document.getElementById('mPartnerCode');
+  codeSel.innerHTML = '<option value="">選択してください</option>' +
+    partners.map(p => `<option value="${p.code}">${p.code}</option>`).join('');
+
+  // 名前タイプ切り替え
+  document.querySelectorAll('input[name=nameType]').forEach(r => {
+    r.addEventListener('change', e => {
+      document.getElementById('mPartnerCode').style.display = e.target.value === 'code' ? '' : 'none';
+      document.getElementById('mClientName').style.display = e.target.value === 'manual' ? '' : 'none';
+    });
+  });
+  document.querySelector('input[name=nameType][value=code]').checked = true;
+  document.getElementById('mPartnerCode').style.display = '';
+  document.getElementById('mClientName').style.display = 'none';
+
+  document.getElementById('modalError').style.display = 'none';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function selectDur(btn, duration, actual) {
+  document.querySelectorAll('.dur-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedDuration = { duration, actual };
+  document.getElementById('mDurManual').value = '';
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+async function submitBooking() {
+  const room_id = document.getElementById('mRoom').value;
+  const time = document.getElementById('mTime').value;
+  const manualMin = parseInt(document.getElementById('mDurManual').value);
+  const nameType = document.querySelector('input[name=nameType]:checked').value;
+  const partner_code = nameType === 'code' ? document.getElementById('mPartnerCode').value : null;
+  const client_name = nameType === 'manual' ? document.getElementById('mClientName').value : null;
+
+  let duration, actual_duration;
+  if (selectedDuration) {
+    duration = selectedDuration.duration;
+    actual_duration = selectedDuration.actual;
+  } else if (!isNaN(manualMin) && manualMin > 0) {
+    duration = manualMin;
+    actual_duration = null;
+  } else {
+    showError('利用時間を選択または入力してください');
+    return;
+  }
+
+  const start_at = `${currentDate}T${time}`;
+
+  const res = await fetch('/api/bookings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ room_id, start_at, duration, actual_duration, partner_code, client_name })
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    showError(data.error);
+    return;
+  }
+
+  closeModal();
+  loadData();
+}
+
+async function deleteBooking(id) {
+  if (!confirm('この予約を削除しますか？')) return;
+  await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+  loadData();
+}
+
+function showError(msg) {
+  const el = document.getElementById('modalError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// モーダル外クリックで閉じる
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+});
+
+// 初回ロード・自動リフレッシュ
+loadData();
+setInterval(loadData, 30000);
+</script>
+
+</body>
+</html>
