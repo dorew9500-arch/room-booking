@@ -23,7 +23,8 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS admins (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       login_id TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL
+      password_hash TEXT NOT NULL,
+      is_master INTEGER DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS stores (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,8 +93,8 @@ async function initDB() {
   const adminRes = _db.exec("SELECT id FROM admins WHERE login_id='admin'");
   if (!adminRes.length || !adminRes[0].values.length) {
     const hash = bcrypt.hashSync('admin1234', 10);
-    _db.run("INSERT INTO admins (login_id, password_hash) VALUES (?, ?)", ['admin', hash]);
-    console.log('管理者アカウント作成: admin / admin1234');
+    _db.run("INSERT INTO admins (login_id, password_hash, is_master) VALUES (?, ?, 1)", ['admin', hash]);
+    console.log('マスター管理者アカウント作成: admin / admin1234');
   }
 
   // 店舗初期データ

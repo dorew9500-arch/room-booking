@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { requireAdmin, requireLogin } = require('../middleware/auth');
+const { requireAdmin, requireMaster, requireLogin } = require('../middleware/auth');
 const { query, queryOne, run } = require('../database');
 
 // ============ 予約API（共通）============
@@ -220,7 +220,7 @@ router.delete('/admin/stores/:id', requireAdmin, (req, res) => {
 router.get('/admin/receptions', requireAdmin, (req, res) => {
   res.json(query('SELECT rc.id, rc.store_id, rc.login_id, rc.is_active, s.name as store_name FROM reception_accounts rc JOIN stores s ON rc.store_id = s.id ORDER BY rc.store_id'));
 });
-router.post('/admin/receptions', requireAdmin, (req, res) => {
+router.post('/admin/receptions', requireMaster, (req, res) => {
   try {
     const { store_id, login_id, password } = req.body;
     const hash = bcrypt.hashSync(password, 10);
@@ -228,13 +228,13 @@ router.post('/admin/receptions', requireAdmin, (req, res) => {
     res.json({ id: result.lastInsertRowid });
   } catch(e) { res.status(400).json({ error: 'ログインIDが重複しています' }); }
 });
-router.patch('/admin/receptions/:id', requireAdmin, (req, res) => {
+router.patch('/admin/receptions/:id', requireMaster, (req, res) => {
   const { password, is_active } = req.body;
   if (password) run('UPDATE reception_accounts SET password_hash = ? WHERE id = ?', [bcrypt.hashSync(password, 10), req.params.id]);
   if (is_active !== undefined) run('UPDATE reception_accounts SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
   res.json({ message: '更新しました' });
 });
-router.delete('/admin/receptions/:id', requireAdmin, (req, res) => {
+router.delete('/admin/receptions/:id', requireMaster, (req, res) => {
   run('DELETE FROM reception_accounts WHERE id = ?', [req.params.id]);
   res.json({ message: '削除しました' });
 });
@@ -252,6 +252,12 @@ router.patch('/admin/rooms/:id', requireAdmin, (req, res) => {
   const { is_active } = req.body;
   if (is_active !== undefined) run('UPDATE rooms SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
   res.json({ message: '更新しました' });
+});
+router.post('/admin/rooms/reorder', requireAdmin, (req, res) => {
+  const { order } = req.body;
+  if (!Array.isArray(order)) return res.status(400).json({ error: '順番データが不正です' });
+  order.forEach((roomId, i) => run('UPDATE rooms SET sort_order = ? WHERE id = ?', [i + 1, roomId]));
+  res.json({ message: '並び順を保存しました' });
 });
 router.delete('/admin/rooms/:id', requireAdmin, (req, res) => {
   const hasBooking = queryOne('SELECT id FROM bookings WHERE room_id = ?', [req.params.id]);

@@ -63,9 +63,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 <div id="tagList" style="margin-bottom:6px"></div>
 </div>
+<% if (user.is_master) { %>
 <div class="card">
-<h2>受付アカウント</h2>
-<p class="notice">店舗ごとに受付ログインを作ります。受付はログインした店舗だけ操作できます。</p>
+<h2>受付アカウント <span style="font-size:11px;color:#e67e22;background:#fff3e0;padding:2px 8px;border-radius:4px">マスター専用</span></h2>
+<p class="notice">店舗ごとに受付ログインを作ります。受付はログインした店舗だけ操作できます。この操作はマスターアカウントのみ可能です。</p>
 <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
 <div class="form-group"><label>店舗</label><select id="recStore"></select></div>
 <div class="form-group"><label>ログインID</label><input type="text" id="recId" placeholder="fiji_uketsuke"></div>
@@ -74,6 +75,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <button class="btn-primary" onclick="addReception()">受付追加</button>
 <div id="recList" style="margin-top:16px"></div>
 </div>
+<% } %>
 </div>
 <script>
 let allTags=[];
@@ -128,6 +130,7 @@ alert('清掃時間を保存しました');
 async function toggleStore(id,cur){await fetch('/api/admin/stores/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:cur?0:1})});loadStores();}
 async function delStore(id){if(!confirm('削除しますか？部屋がある場合は非表示になります'))return;await fetch('/api/admin/stores/'+id,{method:'DELETE'});loadStores();}
 async function loadReceptions(){
+if(!document.getElementById('recList'))return;
 const res=await fetch('/api/admin/receptions');const rc=await res.json();
 document.getElementById('recList').innerHTML=rc.map(r=>`
 <div class="store-item">
@@ -151,7 +154,7 @@ loadReceptions();
 }
 async function resetRecPw(id){const pw=prompt('新しいパスワード');if(!pw)return;await fetch('/api/admin/receptions/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});alert('変更しました');}
 async function delRec(id){if(!confirm('削除しますか？'))return;await fetch('/api/admin/receptions/'+id,{method:'DELETE'});loadReceptions();}
-loadStores();loadReceptions();
+loadTags().then(loadStores);loadReceptions();
 </script>
 </body>
 </html>

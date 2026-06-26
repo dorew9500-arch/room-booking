@@ -16,7 +16,7 @@ router.post('/login', (req, res) => {
   // 管理者
   const admin = queryOne('SELECT * FROM admins WHERE login_id = ?', [login_id]);
   if (admin && bcrypt.compareSync(password, admin.password_hash)) {
-    req.session.user = { id: admin.id, role: 'admin', login_id: admin.login_id };
+    req.session.user = { id: admin.id, role: 'admin', login_id: admin.login_id, is_master: admin.is_master === 1 };
     return res.redirect('/admin');
   }
 

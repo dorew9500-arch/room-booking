@@ -22,6 +22,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .store-group{margin-bottom:18px}
 .store-group-title{font-size:13px;font-weight:600;color:#2d7a4f;margin-bottom:8px}
 .room-item{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;gap:10px}
+.drag-handle{cursor:grab;color:#bbb;font-size:18px;padding:0 4px;user-select:none}
+.room-item.dragging{opacity:0.5;background:#f0faf5}
+.room-drag-list{min-height:10px}
 .room-item:last-child{border-bottom:none}
 .room-name{font-size:15px;font-weight:500;flex:1}
 .status-badge{font-size:11px;padding:2px 8px;border-radius:4px}
@@ -64,17 +67,46 @@ let html='';
 stores.forEach(s=>{
 const rms=byStore[s.id]||[];
 if(!rms.length)return;
-html+=`<div class="store-group"><div class="store-group-title">${s.name}</div>`;
+html+=`<div class="store-group"><div class="store-group-title">${s.name}（≡をドラッグで並び替え）</div><div class="room-drag-list" data-store="${s.id}">`;
 html+=rms.map(r=>`
-<div class="room-item">
+<div class="room-item" draggable="true" data-room="${r.id}">
+<span class="drag-handle">≡</span>
 <span class="room-name">${r.name}</span>
 <span class="status-badge ${r.is_active?'status-active':'status-inactive'}">${r.is_active?'有効':'無効'}</span>
 <button class="btn-sm" onclick="toggleRoom(${r.id},${r.is_active})">${r.is_active?'無効化':'有効化'}</button>
 <button class="btn-sm btn-danger" onclick="delRoom(${r.id})">削除</button>
 </div>`).join('');
-html+='</div>';
+html+='</div></div>';
 });
 document.getElementById('list').innerHTML=html||'<p style="color:#aaa;font-size:13px">部屋がありません</p>';
+setupDrag();
+}
+function setupDrag(){
+document.querySelectorAll('.room-drag-list').forEach(list=>{
+list.querySelectorAll('.room-item').forEach(item=>{
+item.addEventListener('dragstart',()=>{setTimeout(()=>item.classList.add('dragging'),0);});
+item.addEventListener('dragend',()=>{item.classList.remove('dragging');saveOrder(list);});
+});
+list.addEventListener('dragover',e=>{
+e.preventDefault();
+const cur=list.querySelector('.dragging');if(!cur)return;
+const after=getAfter(list,e.clientY);
+if(after==null)list.appendChild(cur);else list.insertBefore(cur,after);
+});
+});
+}
+function getAfter(list,y){
+const items=[...list.querySelectorAll('.room-item:not(.dragging)')];
+return items.reduce((closest,child)=>{
+const box=child.getBoundingClientRect();
+const offset=y-box.top-box.height/2;
+if(offset<0&&offset>closest.offset)return{offset,element:child};
+return closest;
+},{offset:-Infinity}).element;
+}
+async function saveOrder(list){
+const order=[...list.querySelectorAll('.room-item')].map(i=>Number(i.dataset.room));
+await fetch('/api/admin/rooms/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order})});
 }
 async function addRoom(){
 const store_id=document.getElementById('storeSel').value;
