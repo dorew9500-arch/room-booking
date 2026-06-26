@@ -174,7 +174,7 @@ function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.to
 async function load(){const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();renderList(bk);renderGrid(bk);}
 async function toggleBlock(id,cur){
 if(cur){await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:false})});location.reload();}
-else{const reason=prompt('利用不可の理由（例: エアコン故障、清掃中）');if(reason===null)return;await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});location.reload();}
+else{const reason=prompt('利用不可の理由（任意・空欄でもOK）');if(reason===null)return;await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});location.reload();}
 }
 let lastBk=[];
 function renderList(bk){

@@ -92,6 +92,24 @@ async function initDB() {
     );
   `);
 
+  // 自動マイグレーション：既存DBに無い列を安全に追加（データを消さずに構造を更新）
+  function ensureColumn(table, column, definition) {
+    try {
+      const res = _db.exec(`PRAGMA table_info(${table})`);
+      const cols = res.length ? res[0].values.map(r => r[1]) : [];
+      if (!cols.includes(column)) {
+        _db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+        console.log(`マイグレーション: ${table}.${column} を追加`);
+      }
+    } catch (e) { console.log(`マイグレーション警告(${table}.${column}):`, e.message); }
+  }
+  ensureColumn('rooms', 'memo', "TEXT DEFAULT ''");
+  ensureColumn('rooms', 'blocked', 'INTEGER DEFAULT 0');
+  ensureColumn('rooms', 'block_reason', "TEXT DEFAULT ''");
+  ensureColumn('admins', 'is_master', 'INTEGER DEFAULT 0');
+  ensureColumn('bookings', 'extended', 'INTEGER DEFAULT 0');
+  ensureColumn('bookings', 'shifted', 'INTEGER DEFAULT 0');
+
   // 管理者初期データ
   const adminRes = _db.exec("SELECT id FROM admins WHERE login_id='admin'");
   if (!adminRes.length || !adminRes[0].values.length) {

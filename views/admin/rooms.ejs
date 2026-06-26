@@ -127,7 +127,7 @@ async function toggleRoom(id,cur){await fetch('/api/admin/rooms/'+id,{method:'PA
 async function delRoom(id){if(!confirm('削除しますか？予約がある場合は非表示になります'))return;await fetch('/api/admin/rooms/'+id,{method:'DELETE'});loadAll();}
 async function toggleBlock(id,cur){
 if(cur){await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:false})});loadAll();}
-else{const reason=prompt('利用不可の理由（例: エアコン故障、清掃中）');if(reason===null)return;await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});loadAll();}
+else{const reason=prompt('利用不可の理由（任意・空欄でもOK）');if(reason===null)return;await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});loadAll();}
 }
 async function saveMemo(id){const memo=document.getElementById('memo_'+id).value;await fetch('/api/admin/rooms/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({memo})});alert('メモを保存しました');}
 loadAll();
