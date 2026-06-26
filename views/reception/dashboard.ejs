@@ -55,6 +55,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .btn-primary{flex:1;padding:12px;background:#2d7a4f;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer}
 .btn-cancel{padding:12px 20px;background:#f5f5f5;border:1px solid #ddd;border-radius:8px;font-size:15px;cursor:pointer}
 .error-msg{color:#c0392b;font-size:13px;margin-top:8px;display:none}
+.now-row td{border-top:2px solid #e3342f !important}
+.now-row td:first-child{color:#e3342f;font-weight:700}
+.half-row td{border-top:1px solid #d8d8d8}
+.ext-badge{background:#fff3e0;color:#e67e22;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600}
+.shift-badge{background:#e3f2fd;color:#1976d2;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600}
+.t-ext{color:#e67e22;font-size:13px;cursor:pointer;border:1px solid #fce0c0;background:#fff8f0;padding:4px 8px;border-radius:4px}
+.t-shift{color:#1976d2;font-size:13px;cursor:pointer;border:1px solid #cfe5fb;background:#f5fafe;padding:4px 8px;border-radius:4px}
+.ext-btns,.shift-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.ext-btn,.shift-btn{padding:12px 4px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:15px;font-weight:600;cursor:pointer}
+.ext-btn.active,.shift-btn.active{background:#2d7a4f;color:#fff;border-color:#2d7a4f}
+.warn-msg{background:#fff8e1;color:#b26a00;font-size:13px;padding:10px 12px;border-radius:8px;margin-top:12px;line-height:1.5}
 @media(max-width:768px){.main{grid-template-columns:1fr;grid-template-rows:auto 1fr}.panel.timeline{max-height:300px}}
 </style>
 </head>
@@ -110,6 +121,43 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 </div>
 </div>
+<div class="modal-overlay" id="extMo">
+<div class="modal">
+<h2>延長</h2>
+<p class="msub" id="extSub" style="font-size:12px;color:#888;margin-bottom:14px"></p>
+<div class="form-group" style="margin-bottom:8px">
+<label style="display:block;font-size:13px;color:#666;margin-bottom:6px">延長時間</label>
+<div class="ext-btns" id="extBtns"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:13px;color:#666">手入力:</span>
+<input type="number" id="extManual" placeholder="分" min="5" step="5" style="width:80px;padding:8px;border:1px solid #ddd;border-radius:6px">
+<span style="font-size:13px;color:#666">分</span>
+</div>
+</div>
+<div class="error-msg" id="extErr"></div>
+<div class="warn-msg">延長したら、お店にも電話で延長を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeExt()">キャンセル</button>
+<button class="btn-primary" onclick="doExtend()">延長する</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="shiftMo">
+<div class="modal">
+<h2>時間をずらす</h2>
+<p class="msub" id="shiftSub" style="font-size:12px;color:#888;margin-bottom:14px"></p>
+<div class="form-group" style="margin-bottom:8px">
+<label style="display:block;font-size:13px;color:#666;margin-bottom:6px">新しい開始時刻</label>
+<input type="time" id="shiftTime" step="300" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:16px">
+</div>
+<div class="error-msg" id="shiftErr"></div>
+<div class="warn-msg">時間を変更したら、お店にも電話で変更を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeShift()">キャンセル</button>
+<button class="btn-primary" onclick="doShift()">変更する</button>
+</div>
+</div>
+</div>
 <script>
 const rooms=<%- JSON.stringify(rooms) %>;
 const partners=<%- JSON.stringify(partners) %>;
@@ -120,25 +168,33 @@ document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.tar
 function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 async function load(){const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();renderList(bk);renderGrid(bk);}
+let lastBk=[];
 function renderList(bk){
+lastBk=bk;
 document.getElementById('cnt').textContent=bk.length+'件';
 if(!bk.length){document.getElementById('list').innerHTML='<div class="empty-msg">予約はありません</div>';return;}
 const s=[...bk].sort((a,b)=>a.start_at.localeCompare(b.start_at));
-document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);const nm=b.partner_code||b.client_name||'-';return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分</span><span class="t-name">${nm}</span><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;}).join('');
+document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);const nm=b.partner_code||b.client_name||'-';let badge='';if(b.extended)badge+=' <span class="ext-badge">延長済</span>';if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;}).join('');
 }
+function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
+function isToday(){return curDate===new Date().toISOString().slice(0,10);}
 function renderGrid(bk){
 document.getElementById('gh').innerHTML='<tr><th>時間</th>'+rooms.map(r=>`<th>${r.name}</th>`).join('')+'</tr>';
 const map={};rooms.forEach(r=>map[r.id]=[]);
 bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes});}});
+const ns=nowSlot();const today=isToday();
 const rows=[];
-for(let h=10;h<34;h++){for(let m=0;m<60;m+=30){
+for(let h=10;h<34;h++){for(let m=0;m<60;m+=5){
 const tot=h*60+m;const dh=h>=24?h-24:h;
 const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-let c=`<td>${lb}</td>`;
-rooms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='booked')c+=`<td class="cell-booked"><span class="cell-label">×</span></td>`;else if(st==='cleaning')c+=`<td class="cell-cleaning"></td>`;else c+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
-rows.push(`<tr>${c}</tr>`);
+const isNow=today&&ns>=tot&&ns<tot+5;
+const showLabel=(m%30===0);
+let c=`<td>${showLabel?lb:''}</td>`;
+rooms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='booked')c+=`<td class="cell-booked">${showLabel?'<span class="cell-label">×</span>':''}</td>`;else if(st==='cleaning')c+=`<td class="cell-cleaning"></td>`;else c+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+rows.push(`<tr${isNow?' id="nowRow" class="now-row"':''}${showLabel?' class="half-row"':''}>${c}</tr>`);
 }}
 document.getElementById('gb').innerHTML=rows.join('');
+if(today){const nr=document.getElementById('nowRow');if(nr)nr.scrollIntoView({block:'center'});}
 }
 function cellStatus(bs,slot){for(const b of bs){if(slot>=b.start&&slot<b.course)return 'booked';if(slot>=b.course&&slot<b.end)return 'cleaning';}return 'free';}
 function tm(s){const[h,m]=s.split(':').map(Number);return h*60+m;}

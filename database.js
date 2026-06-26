@@ -41,6 +41,17 @@ async function initDB() {
       is_active INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
     );
+    CREATE TABLE IF NOT EXISTS area_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    );
+    CREATE TABLE IF NOT EXISTS store_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      store_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS partners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL UNIQUE,
@@ -71,6 +82,8 @@ async function initDB() {
       start_at TEXT NOT NULL,
       course_minutes INTEGER NOT NULL,
       block_minutes INTEGER NOT NULL,
+      extended INTEGER DEFAULT 0,
+      shifted INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
     );
   `);
@@ -97,6 +110,15 @@ async function initDB() {
     _db.run("INSERT INTO reception_accounts (store_id, login_id, password_hash) VALUES (?,?,?)", [1, 'fiji', bcrypt.hashSync('fiji2015', 10)]);
     _db.run("INSERT INTO reception_accounts (store_id, login_id, password_hash) VALUES (?,?,?)", [2, 'pinkfuraminngo', bcrypt.hashSync('pinkfuraminngo2017', 10)]);
     console.log('受付アカウント初期データ投入完了');
+  }
+
+  // エリアタグ初期データ（新宿をフィジー・フラミンゴに付与）
+  const tagRes = _db.exec("SELECT id FROM area_tags LIMIT 1");
+  if (!tagRes.length || !tagRes[0].values.length) {
+    _db.run("INSERT INTO area_tags (name, sort_order) VALUES (?,?)", ['新宿', 1]);
+    _db.run("INSERT INTO store_tags (store_id, tag_id) VALUES (?,?)", [1, 1]);
+    _db.run("INSERT INTO store_tags (store_id, tag_id) VALUES (?,?)", [2, 1]);
+    console.log('エリアタグ初期データ投入完了（新宿）');
   }
 
   // コース時間初期データ（20/30/45/60/75/90/120）

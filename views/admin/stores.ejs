@@ -30,6 +30,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .status-inactive{background:#f5f5f5;color:#aaa}
 .btn-sm{padding:5px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#f5f5f5}
 .btn-danger{border-color:#fde8e8;background:#fde8e8;color:#c0392b}
+.tag-on{background:#2d7a4f !important;color:#fff !important;border-color:#2d7a4f !important}
 </style>
 </head>
 <body>
@@ -54,6 +55,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <div id="list"></div>
 </div>
 <div class="card">
+<h2>エリアタグ</h2>
+<p class="notice">エリア（新宿・歌舞伎町など）を作成し、各店舗に付けます。予約者はこのエリアで絞り込めます。1店舗に複数付けられます。</p>
+<div style="display:flex;gap:10px;margin-bottom:14px">
+<input type="text" id="newTag" placeholder="エリア名（例: 新宿）" style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px">
+<button class="btn-primary" onclick="addTag()">エリア追加</button>
+</div>
+<div id="tagList" style="margin-bottom:6px"></div>
+</div>
+<div class="card">
 <h2>受付アカウント</h2>
 <p class="notice">店舗ごとに受付ログインを作ります。受付はログインした店舗だけ操作できます。</p>
 <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
@@ -66,16 +76,40 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 </div>
 <script>
+let allTags=[];
+async function loadTags(){
+const res=await fetch('/api/admin/tags');allTags=await res.json();
+document.getElementById('tagList').innerHTML=allTags.length?allTags.map(t=>`<span class="status-badge status-active" style="margin-right:6px">${t.name} <span style="cursor:pointer;color:#c0392b" onclick="delTag(${t.id})">×</span></span>`).join(''):'<span style="color:#aaa;font-size:13px">エリアがありません</span>';
+}
+async function addTag(){
+const name=document.getElementById('newTag').value.trim();
+if(!name)return alert('エリア名を入力してください');
+const res=await fetch('/api/admin/tags',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+const d=await res.json();
+if(!res.ok)return alert(d.error);
+document.getElementById('newTag').value='';
+await loadTags();loadStores();
+}
+async function delTag(id){if(!confirm('このエリアを削除しますか？店舗からも外れます'))return;await fetch('/api/admin/tags/'+id,{method:'DELETE'});await loadTags();loadStores();}
+async function toggleStoreTag(storeId,tagId,has){
+if(has)await fetch(`/api/admin/stores/${storeId}/tags/${tagId}`,{method:'DELETE'});
+else await fetch(`/api/admin/stores/${storeId}/tags`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tag_id:tagId})});
+loadStores();
+}
 async function loadStores(){
 const res=await fetch('/api/admin/stores');const stores=await res.json();
-document.getElementById('list').innerHTML=stores.map(s=>`
+document.getElementById('list').innerHTML=stores.map(s=>{
+const tagIds=(s.tags||[]).map(t=>t.id);
+const tagBtns=allTags.map(t=>`<button class="btn-sm ${tagIds.includes(t.id)?'tag-on':''}" onclick="toggleStoreTag(${s.id},${t.id},${tagIds.includes(t.id)})">${t.name}</button>`).join(' ');
+return `
 <div class="store-item">
 <span class="s-name">${s.name}</span>
 <span class="s-clean">清掃 <input type="number" value="${s.cleaning_minutes}" min="0" step="5" id="clean_${s.id}"> 分 <button class="btn-sm" onclick="saveClean(${s.id})">保存</button></span>
 <span class="status-badge ${s.is_active?'status-active':'status-inactive'}">${s.is_active?'有効':'無効'}</span>
 <button class="btn-sm" onclick="toggleStore(${s.id},${s.is_active})">${s.is_active?'無効化':'有効化'}</button>
 <button class="btn-sm btn-danger" onclick="delStore(${s.id})">削除</button>
-</div>`).join('')||'<p style="color:#aaa;font-size:13px">店舗がありません</p>';
+<div style="flex-basis:100%;font-size:12px;color:#888;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px">エリア: ${tagBtns||'<span style="color:#bbb">エリア未作成</span>'}</div>
+</div>`;}).join('')||'<p style="color:#aaa;font-size:13px">店舗がありません</p>';
 document.getElementById('recStore').innerHTML=stores.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
 async function addStore(){

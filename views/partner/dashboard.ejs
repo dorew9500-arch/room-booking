@@ -13,6 +13,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .header input[type=date]{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
 .header button.day{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;font-size:13px;cursor:pointer}
 .header select{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.area-bar{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.area-label{font-size:12px;color:#888}
+.area-chip{padding:5px 12px;border:1px solid #2d7a4f;border-radius:14px;background:#fff;color:#2d7a4f;font-size:13px;cursor:pointer}
+.area-chip.active{background:#2d7a4f;color:#fff}
 .spacer{flex:1}
 .logout-btn{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;color:#666}
 .main{display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px;height:calc(100vh - 57px)}
@@ -57,6 +61,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .btn-primary{flex:1;padding:11px;background:#2d7a4f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
 .btn-cancel{padding:11px 20px;background:#f5f5f5;border:1px solid #ddd;border-radius:8px;font-size:14px;cursor:pointer}
 .error-msg{color:#c0392b;font-size:12px;margin-top:6px;display:none}
+.now-row td{border-top:2px solid #e3342f !important}
+.now-row td:first-child{color:#e3342f;font-weight:700}
+.half-row td{border-top:1px solid #d8d8d8}
+.ext-badge{background:#fff3e0;color:#e67e22;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600}
+.shift-badge{background:#e3f2fd;color:#1976d2;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600}
+.t-ext{color:#e67e22;font-size:12px;cursor:pointer;border:1px solid #fce0c0;background:#fff8f0;padding:3px 7px;border-radius:4px}
+.t-shift{color:#1976d2;font-size:12px;cursor:pointer;border:1px solid #cfe5fb;background:#f5fafe;padding:3px 7px;border-radius:4px}
+.ext-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.ext-btn{padding:11px 4px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer}
+.ext-btn.active{background:#2d7a4f;color:#fff;border-color:#2d7a4f}
+.warn-msg{background:#fff8e1;color:#b26a00;font-size:12px;padding:9px 12px;border-radius:8px;margin-top:12px;line-height:1.5}
 @media(max-width:768px){.main{grid-template-columns:1fr;grid-template-rows:auto 1fr}.panel.timeline{max-height:260px}}
 </style>
 </head>
@@ -67,10 +82,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
 <button class="day" onclick="setToday()">今日</button>
 <button class="day" onclick="setYesterday()">昨日</button>
-<select id="storeFilter" onchange="load()">
-<option value="">全店舗</option>
-<% stores.forEach(s=>{ %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
-</select>
+<div class="area-bar" id="areaBar">
+<span class="area-label">エリア:</span>
+<% areas.forEach(a=>{ %><button class="area-chip" data-area="<%= a.id %>" onclick="toggleArea(this)"><%= a.name %></button><% }) %>
+</div>
 <div class="spacer"></div>
 <form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
 </div>
@@ -108,16 +123,57 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 </div>
 </div>
+<div class="modal-overlay" id="extMo">
+<div class="modal">
+<h2>延長</h2>
+<p class="msub" id="extSub"></p>
+<div class="form-group" style="margin-bottom:8px">
+<label style="display:block;font-size:12px;color:#666;margin-bottom:6px">延長時間</label>
+<div class="ext-btns" id="extBtns"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;color:#666">手入力:</span>
+<input type="number" id="extManual" placeholder="分" min="5" step="5" style="width:74px;padding:7px;border:1px solid #ddd;border-radius:6px">
+<span style="font-size:12px;color:#666">分</span>
+</div>
+</div>
+<div class="error-msg" id="extErr"></div>
+<div class="warn-msg">延長したら、お店にも電話で延長を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeExt()">キャンセル</button>
+<button class="btn-primary" onclick="doExtend()">延長する</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="shiftMo">
+<div class="modal">
+<h2>時間をずらす</h2>
+<p class="msub" id="shiftSub"></p>
+<div class="form-group" style="margin-bottom:8px">
+<label style="display:block;font-size:12px;color:#666;margin-bottom:6px">新しい開始時刻</label>
+<input type="time" id="shiftTime" step="300" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:7px;font-size:15px">
+</div>
+<div class="error-msg" id="shiftErr"></div>
+<div class="warn-msg">時間を変更したら、お店にも電話で変更を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeShift()">キャンセル</button>
+<button class="btn-primary" onclick="doShift()">変更する</button>
+</div>
+</div>
+</div>
 <script>
 const stores=<%- JSON.stringify(stores) %>;
 const allRooms=<%- JSON.stringify(rooms) %>;
 const durations=<%- JSON.stringify(durations) %>;
 let selCourse=null;
+let selectedAreas=[];
 let curDate=document.getElementById('dateInput').value;
 document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.target.value;load();});
 function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
-function visibleStores(){const f=document.getElementById('storeFilter').value;return f?stores.filter(s=>s.id==f):stores;}
+function toggleArea(btn){const id=Number(btn.dataset.area);if(selectedAreas.includes(id)){selectedAreas=selectedAreas.filter(a=>a!==id);btn.classList.remove('active');}else{selectedAreas.push(id);btn.classList.add('active');}rebuildStoreFilter();load();}
+function areaStores(){if(!selectedAreas.length)return stores;return stores.filter(s=>(s.tagIds||[]).some(t=>selectedAreas.includes(t)));}
+function rebuildStoreFilter(){const sel=document.getElementById('storeFilter');const cur=sel.value;const list=areaStores();sel.innerHTML='<option value="">全店舗</option>'+list.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');if(list.some(s=>String(s.id)===cur))sel.value=cur;else sel.value='';}
+function visibleStores(){const f=document.getElementById('storeFilter').value;const base=areaStores();return f?base.filter(s=>s.id==f):base;}
 function roomsOf(sid){return allRooms.filter(r=>r.store_id==sid);}
 async function load(){
 const f=document.getElementById('storeFilter').value;
@@ -125,31 +181,40 @@ const url=f?`/api/bookings?date=${curDate}&store_id=${f}`:`/api/bookings?date=${
 const res=await fetch(url);const bk=await res.json();
 renderList(bk);renderGrids(bk);
 }
+let lastBk=[];
 function renderList(bk){
+lastBk=bk;
 const mine=bk.filter(b=>!b.is_other);
 document.getElementById('cnt').textContent=mine.length+'件';
 if(!mine.length){document.getElementById('list').innerHTML='<div class="empty-msg">予約はありません</div>';return;}
 const s=[...mine].sort((a,b)=>a.start_at.localeCompare(b.start_at));
-document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分</span><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;}).join('');
+document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);let badge='';if(b.extended)badge+=' <span class="ext-badge">延長済</span>';if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;}).join('');
 }
+function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
+function isToday(){return curDate===new Date().toISOString().slice(0,10);}
 function renderGrids(bk){
 const map={};allRooms.forEach(r=>map[r.id]=[]);
 bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes,mine:!b.is_other});}});
+const ns=nowSlot();const today=isToday();let firstNowId=null;
 let html='';
 visibleStores().forEach(store=>{
 const rms=roomsOf(store.id);
 if(!rms.length)return;
 html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}</th>`).join('')}</tr></thead><tbody>`;
-for(let h=10;h<34;h++){for(let m=0;m<60;m+=30){
+for(let h=10;h<34;h++){for(let m=0;m<60;m+=5){
 const tot=h*60+m;const dh=h>=24?h-24:h;
 const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-html+=`<tr><td>${lb}</td>`;
-rms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='mine')html+=`<td class="cell-mine"><span class="cell-label" style="color:#2d7a4f">自</span></td>`;else if(st==='booked')html+=`<td class="cell-booked"><span class="cell-label" style="color:#c0392b">×</span></td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+const isNow=today&&ns>=tot&&ns<tot+5;
+const showLabel=(m%30===0);
+let rowId='';if(isNow&&!firstNowId){firstNowId='now_'+store.id+'_'+tot;rowId=` id="${firstNowId}"`;}
+html+=`<tr${rowId}${isNow?' class="now-row"':''}${showLabel?' class="half-row"':''}><td>${showLabel?lb:''}</td>`;
+rms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='mine')html+=`<td class="cell-mine">${showLabel?'<span class="cell-label" style="color:#2d7a4f">自</span>':''}</td>`;else if(st==='booked')html+=`<td class="cell-booked">${showLabel?'<span class="cell-label" style="color:#c0392b">×</span>':''}</td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
 html+=`</tr>`;
 }}
 html+=`</tbody></table></div>`;
 });
 document.getElementById('grids').innerHTML=html||'<div class="empty-msg">部屋がありません</div>';
+if(firstNowId){const nr=document.getElementById(firstNowId);if(nr)nr.scrollIntoView({block:'center'});}
 }
 function cellStatus(bs,slot){for(const b of bs){if(slot>=b.start&&slot<b.course)return b.mine?'mine':'booked';if(slot>=b.course&&slot<b.end)return 'cleaning';}return 'free';}
 function tm(s){const[h,m]=s.split(':').map(Number);return h*60+m;}
@@ -183,6 +248,18 @@ closeM();load();
 async function delB(id){if(!confirm('削除しますか？'))return;await fetch(`/api/bookings/${id}`,{method:'DELETE'});load();}
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
 document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
+
+let extId=null,extAdd=null;
+function openExt(id){extId=id;extAdd=null;const b=lastBk.find(x=>x.id===id);document.getElementById('extSub').textContent=b?`${b.room_name} / ${b.start_at.slice(11,16)} 開始 / 現在${b.course_minutes}分`:'';document.getElementById('extBtns').innerHTML=[10,20,30,60].map(m=>`<button class="ext-btn" onclick="selExt(this,${m})">+${m}分</button>`).join('');document.getElementById('extManual').value='';document.getElementById('extErr').style.display='none';document.getElementById('extMo').classList.add('open');}
+function selExt(btn,m){document.querySelectorAll('.ext-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');extAdd=m;document.getElementById('extManual').value='';}
+function closeExt(){document.getElementById('extMo').classList.remove('open');}
+async function doExtend(){const man=parseInt(document.getElementById('extManual').value);let add;if(extAdd)add=extAdd;else if(!isNaN(man)&&man>0)add=man;else{document.getElementById('extErr').textContent='延長時間を選んでください';document.getElementById('extErr').style.display='block';return;}const res=await fetch(`/api/bookings/${extId}/extend`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({add_minutes:add})});const d=await res.json();if(!res.ok){document.getElementById('extErr').textContent=d.error;document.getElementById('extErr').style.display='block';return;}closeExt();load();}
+document.getElementById('extMo').addEventListener('click',e=>{if(e.target===document.getElementById('extMo'))closeExt();});
+let shiftId=null;
+function openShift(id){shiftId=id;const b=lastBk.find(x=>x.id===id);document.getElementById('shiftSub').textContent=b?`${b.room_name} / 現在 ${b.start_at.slice(11,16)} 開始`:'';document.getElementById('shiftTime').value=b?b.start_at.slice(11,16):'';document.getElementById('shiftErr').style.display='none';document.getElementById('shiftMo').classList.add('open');}
+function closeShift(){document.getElementById('shiftMo').classList.remove('open');}
+async function doShift(){const t=document.getElementById('shiftTime').value;if(!t){document.getElementById('shiftErr').textContent='時刻を入力してください';document.getElementById('shiftErr').style.display='block';return;}const res=await fetch(`/api/bookings/${shiftId}/shift`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_time:t})});const d=await res.json();if(!res.ok){document.getElementById('shiftErr').textContent=d.error;document.getElementById('shiftErr').style.display='block';return;}closeShift();load();}
+document.getElementById('shiftMo').addEventListener('click',e=>{if(e.target===document.getElementById('shiftMo'))closeShift();});
 load();setInterval(load,30000);
 </script>
 </body>
