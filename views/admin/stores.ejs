@@ -45,7 +45,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <h2>店舗を追加</h2>
 <p class="notice">清掃時間（インターバル）はその店舗の全部屋に適用され、コース時間に自動で加算されます。</p>
 <div class="form-grid">
-<div class="form-group"><label>店舗名</label><input type="text" id="newName" placeholder="例: フィジー"></div>
+<div class="form-group"><label>店舗名</label><input type="text" id="newName" placeholder=""></div>
 <div class="form-group"><label>清掃時間（分）</label><input type="number" id="newClean" value="5" min="0" step="5"></div>
 </div>
 <button class="btn-primary" onclick="addStore()">追加</button>
@@ -58,7 +58,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <h2>エリアタグ</h2>
 <p class="notice">エリア（新宿・歌舞伎町など）を作成し、各店舗に付けます。予約者はこのエリアで絞り込めます。1店舗に複数付けられます。</p>
 <div style="display:flex;gap:10px;margin-bottom:14px">
-<input type="text" id="newTag" placeholder="エリア名（例: 新宿）" style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px">
+<input type="text" id="newTag" placeholder="" style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px">
 <button class="btn-primary" onclick="addTag()">エリア追加</button>
 </div>
 <div id="tagList" style="margin-bottom:6px"></div>
@@ -69,8 +69,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <p class="notice">店舗ごとに受付ログインを作ります。受付はログインした店舗だけ操作できます。この操作はマスターアカウントのみ可能です。</p>
 <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
 <div class="form-group"><label>店舗</label><select id="recStore"></select></div>
-<div class="form-group"><label>ログインID</label><input type="text" id="recId" placeholder="fiji_uketsuke"></div>
-<div class="form-group"><label>パスワード</label><input type="password" id="recPw" placeholder="パスワード"></div>
+<div class="form-group"><label>ログインID</label><input type="text" id="recId" placeholder=""></div>
+<div class="form-group"><label>パスワード</label><input type="password" id="recPw" placeholder=""></div>
 </div>
 <button class="btn-primary" onclick="addReception()">受付追加</button>
 <div id="recList" style="margin-top:16px"></div>
