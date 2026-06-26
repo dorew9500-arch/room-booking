@@ -72,9 +72,16 @@ html+=rms.map(r=>`
 <div class="room-item" draggable="true" data-room="${r.id}">
 <span class="drag-handle">≡</span>
 <span class="room-name">${r.name}</span>
+${r.blocked?`<span class="status-badge" style="background:#fde8e8;color:#c0392b">利用不可${r.block_reason?'：'+r.block_reason:''}</span>`:''}
 <span class="status-badge ${r.is_active?'status-active':'status-inactive'}">${r.is_active?'有効':'無効'}</span>
 <button class="btn-sm" onclick="toggleRoom(${r.id},${r.is_active})">${r.is_active?'無効化':'有効化'}</button>
+<button class="btn-sm" onclick="toggleBlock(${r.id},${r.blocked})">${r.blocked?'利用可能に戻す':'利用不可にする'}</button>
 <button class="btn-sm btn-danger" onclick="delRoom(${r.id})">削除</button>
+<div style="flex-basis:100%;display:flex;gap:6px;align-items:center;margin-top:4px">
+<span style="font-size:12px;color:#888">メモ:</span>
+<input type="text" value="${(r.memo||'').replace(/"/g,'&quot;')}" id="memo_${r.id}" placeholder="" style="flex:1;max-width:280px;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+<button class="btn-sm" onclick="saveMemo(${r.id})">保存</button>
+</div>
 </div>`).join('');
 html+='</div></div>';
 });
@@ -118,6 +125,11 @@ loadAll();
 }
 async function toggleRoom(id,cur){await fetch('/api/admin/rooms/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({is_active:cur?0:1})});loadAll();}
 async function delRoom(id){if(!confirm('削除しますか？予約がある場合は非表示になります'))return;await fetch('/api/admin/rooms/'+id,{method:'DELETE'});loadAll();}
+async function toggleBlock(id,cur){
+if(cur){await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:false})});loadAll();}
+else{const reason=prompt('利用不可の理由（例: エアコン故障、清掃中）');if(reason===null)return;await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});loadAll();}
+}
+async function saveMemo(id){const memo=document.getElementById('memo_'+id).value;await fetch('/api/admin/rooms/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({memo})});alert('メモを保存しました');}
 loadAll();
 </script>
 </body>

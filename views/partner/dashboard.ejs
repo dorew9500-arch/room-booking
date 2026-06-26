@@ -17,6 +17,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .area-label{font-size:12px;color:#888}
 .area-chip{padding:5px 12px;border:1px solid #2d7a4f;border-radius:14px;background:#fff;color:#2d7a4f;font-size:13px;cursor:pointer}
 .area-chip.active{background:#2d7a4f;color:#fff}
+.navbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 16px;background:#f7f9f8;border-bottom:1px solid #eee}
+.nav-label{font-size:13px;color:#888;margin-right:2px}
+.nav-chip{padding:7px 16px;border:1px solid #2d7a4f;border-radius:16px;background:#fff;color:#2d7a4f;font-size:14px;cursor:pointer;font-weight:600}
+.nav-chip:hover{background:#e8f5ee}
+.nav-back{padding:7px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#555;font-size:13px;cursor:pointer}
+.nav-back:hover{background:#f0f0f0}
+.nav-current{font-size:14px;font-weight:600;color:#2d7a4f;padding:0 4px}
+.nav-sep{color:#ccc}
 .spacer{flex:1}
 .logout-btn{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;color:#666}
 .main{display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px;height:calc(100vh - 57px)}
@@ -44,6 +52,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .cell-booked{background:#fde8e8}
 .cell-mine{background:#d4f4dd}
 .cell-cleaning{background:#eee}
+.cell-blocked{background:repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5 4px,#e8e8e8 4px,#e8e8e8 8px);cursor:not-allowed}
+.room-memo{font-size:10px;color:#2d7a4f;font-weight:normal;margin-top:2px}
+.room-blocked{font-size:10px;color:#c0392b;font-weight:normal;margin-top:2px}
 .cell-label{font-size:11px;font-weight:600}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -82,13 +93,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
 <button class="day" onclick="setToday()">今日</button>
 <button class="day" onclick="setYesterday()">昨日</button>
-<div class="area-bar" id="areaBar">
-<span class="area-label">エリア:</span>
-<% areas.forEach(a=>{ %><button class="area-chip" data-area="<%= a.id %>" onclick="toggleArea(this)"><%= a.name %></button><% }) %>
-</div>
 <div class="spacer"></div>
 <form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
 </div>
+<div class="navbar" id="navbar"></div>
 <div class="main">
 <div class="panel timeline">
 <div class="panel-header"><span>自分の予約</span><span class="count" id="cnt">0件</span></div>
@@ -162,23 +170,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 <script>
 const stores=<%- JSON.stringify(stores) %>;
+const areas=<%- JSON.stringify(areas) %>;
 const allRooms=<%- JSON.stringify(rooms) %>;
 const durations=<%- JSON.stringify(durations) %>;
 let selCourse=null;
-let selectedAreas=[];
+let selectedArea=null;
+let selectedStore=null;
 let curDate=document.getElementById('dateInput').value;
 document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.target.value;load();});
 function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
-function toggleArea(btn){const id=Number(btn.dataset.area);if(selectedAreas.includes(id)){selectedAreas=selectedAreas.filter(a=>a!==id);btn.classList.remove('active');}else{selectedAreas.push(id);btn.classList.add('active');}rebuildStoreFilter();load();}
-function areaStores(){if(!selectedAreas.length)return stores;return stores.filter(s=>(s.tagIds||[]).some(t=>selectedAreas.includes(t)));}
-function rebuildStoreFilter(){const sel=document.getElementById('storeFilter');const cur=sel.value;const list=areaStores();sel.innerHTML='<option value="">全店舗</option>'+list.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');if(list.some(s=>String(s.id)===cur))sel.value=cur;else sel.value='';}
-function visibleStores(){const f=document.getElementById('storeFilter').value;const base=areaStores();return f?base.filter(s=>s.id==f):base;}
+function storesInArea(areaId){return stores.filter(s=>(s.tagIds||[]).includes(areaId));}
+function pickArea(id){selectedArea=id;selectedStore=null;const ss=storesInArea(id);if(ss.length===1){selectedStore=ss[0].id;}renderNav();load();}
+function pickStore(id){selectedStore=id;renderNav();load();}
+function backToAreas(){selectedArea=null;selectedStore=null;renderNav();load();}
+function backToStores(){selectedStore=null;renderNav();load();}
+function renderNav(){
+const nav=document.getElementById('navbar');
+if(selectedArea===null){
+// エリア選択
+if(areas.length===1){selectedArea=areas[0].id;const ss=storesInArea(selectedArea);if(ss.length===1)selectedStore=ss[0].id;renderNav();return;}
+nav.innerHTML='<span class="nav-label">エリアを選択:</span>'+areas.map(a=>`<button class="nav-chip" onclick="pickArea(${a.id})">${a.name}</button>`).join('');
+}else if(selectedStore===null){
+// 店舗選択
+const a=areas.find(x=>x.id===selectedArea);
+const ss=storesInArea(selectedArea);
+nav.innerHTML=`<button class="nav-back" onclick="backToAreas()">← エリア選択</button><span class="nav-current">${a?a.name:''}</span><span class="nav-sep">›</span><span class="nav-label">店舗を選択:</span>`+(ss.length?ss.map(s=>`<button class="nav-chip" onclick="pickStore(${s.id})">${s.name}</button>`).join(''):'<span style="color:#aaa;font-size:13px">店舗がありません</span>');
+}else{
+// グリッド表示中
+const a=areas.find(x=>x.id===selectedArea);
+const s=stores.find(x=>x.id===selectedStore);
+const ss=storesInArea(selectedArea);
+let back='';
+if(ss.length>1)back=`<button class="nav-back" onclick="backToStores()">← 店舗一覧</button>`;
+else back=`<button class="nav-back" onclick="backToAreas()">← エリア選択</button>`;
+nav.innerHTML=back+`<span class="nav-current">${a?a.name:''}</span><span class="nav-sep">›</span><span class="nav-current">${s?s.name:''}</span>`;
+}
+}
 function roomsOf(sid){return allRooms.filter(r=>r.store_id==sid);}
 async function load(){
-const f=document.getElementById('storeFilter').value;
-const url=f?`/api/bookings?date=${curDate}&store_id=${f}`:`/api/bookings?date=${curDate}`;
-const res=await fetch(url);const bk=await res.json();
+const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();
 renderList(bk);renderGrids(bk);
 }
 let lastBk=[];
@@ -193,14 +224,23 @@ document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,
 function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
 function isToday(){return curDate===new Date().toISOString().slice(0,10);}
 function renderGrids(bk){
+const grids=document.getElementById('grids');
+// 店舗が選ばれていなければ案内を表示
+if(selectedStore===null){
+let msg='';
+if(selectedArea===null)msg='上のエリアを選んでください';
+else msg='上の店舗を選んでください';
+grids.innerHTML=`<div class="empty-msg" style="padding:40px 20px;text-align:center;color:#999">${msg}</div>`;
+return;
+}
 const map={};allRooms.forEach(r=>map[r.id]=[]);
 bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes,mine:!b.is_other});}});
 const ns=nowSlot();const today=isToday();let firstNowId=null;
 let html='';
-visibleStores().forEach(store=>{
+[stores.find(s=>s.id===selectedStore)].filter(Boolean).forEach(store=>{
 const rms=roomsOf(store.id);
-if(!rms.length)return;
-html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}</th>`).join('')}</tr></thead><tbody>`;
+if(!rms.length){html+=`<div class="empty-msg" style="padding:30px;color:#999">この店舗には部屋がありません</div>`;return;}
+html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}${r.memo?`<div class="room-memo">${r.memo}</div>`:''}${r.blocked?`<div class="room-blocked">利用不可${r.block_reason?'：'+r.block_reason:''}</div>`:''}</th>`).join('')}</tr></thead><tbody>`;
 for(let h=10;h<34;h++){for(let m=0;m<60;m+=5){
 const tot=h*60+m;const dh=h>=24?h-24:h;
 const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
@@ -208,7 +248,7 @@ const isNow=today&&ns>=tot&&ns<tot+5;
 const showLabel=(m%30===0);
 let rowId='';if(isNow&&!firstNowId){firstNowId='now_'+store.id+'_'+tot;rowId=` id="${firstNowId}"`;}
 html+=`<tr${rowId}${isNow?' class="now-row"':''}${showLabel?' class="half-row"':''}><td>${showLabel?lb:''}</td>`;
-rms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='mine')html+=`<td class="cell-mine">${showLabel?'<span class="cell-label" style="color:#2d7a4f">自</span>':''}</td>`;else if(st==='booked')html+=`<td class="cell-booked">${showLabel?'<span class="cell-label" style="color:#c0392b">×</span>':''}</td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+rms.forEach(r=>{if(r.blocked){html+=`<td class="cell-blocked"></td>`;return;}const st=cellStatus(map[r.id],tot);if(st==='mine')html+=`<td class="cell-mine">${showLabel?'<span class="cell-label" style="color:#2d7a4f">自</span>':''}</td>`;else if(st==='booked')html+=`<td class="cell-booked">${showLabel?'<span class="cell-label" style="color:#c0392b">×</span>':''}</td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
 html+=`</tr>`;
 }}
 html+=`</tbody></table></div>`;
@@ -260,7 +300,7 @@ function openShift(id){shiftId=id;const b=lastBk.find(x=>x.id===id);document.get
 function closeShift(){document.getElementById('shiftMo').classList.remove('open');}
 async function doShift(){const t=document.getElementById('shiftTime').value;if(!t){document.getElementById('shiftErr').textContent='時刻を入力してください';document.getElementById('shiftErr').style.display='block';return;}const res=await fetch(`/api/bookings/${shiftId}/shift`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_time:t})});const d=await res.json();if(!res.ok){document.getElementById('shiftErr').textContent=d.error;document.getElementById('shiftErr').style.display='block';return;}closeShift();load();}
 document.getElementById('shiftMo').addEventListener('click',e=>{if(e.target===document.getElementById('shiftMo'))closeShift();});
-load();setInterval(load,30000);
+renderNav();load();setInterval(load,30000);
 </script>
 </body>
 </html>

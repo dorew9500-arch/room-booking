@@ -41,6 +41,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .grid td:first-child{padding:2px 10px;font-size:11px;color:#888;background:#f9f9f9;white-space:nowrap;position:sticky;left:0}
 .cell-free{background:#fff;cursor:pointer}
 .cell-free:hover{background:#e8f5ee}
+.cell-blocked{background:repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5 4px,#e8e8e8 4px,#e8e8e8 8px);cursor:not-allowed}
+.room-memo{font-size:10px;color:#2d7a4f;font-weight:normal;margin-top:2px}
+.room-blocked{font-size:10px;color:#c0392b;font-weight:normal;margin-top:2px}
 .cell-booked{background:#fde8e8}
 .cell-cleaning{background:#eee}
 .cell-label{font-size:11px;color:#c0392b;font-weight:600}
@@ -210,7 +213,7 @@ let html='';
 visibleStores().forEach(store=>{
 const rms=roomsOf(store.id);
 if(!rms.length)return;
-html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}</th>`).join('')}</tr></thead><tbody>`;
+html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}${r.memo?`<div class="room-memo">${r.memo}</div>`:''}${r.blocked?`<div class="room-blocked">利用不可${r.block_reason?'：'+r.block_reason:''}</div>`:''}</th>`).join('')}</tr></thead><tbody>`;
 for(let h=10;h<34;h++){for(let m=0;m<60;m+=5){
 const tot=h*60+m;const dh=h>=24?h-24:h;
 const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
@@ -218,7 +221,7 @@ const isNow=today&&ns>=tot&&ns<tot+5;
 const showLabel=(m%30===0);
 let rowId='';if(isNow&&!firstNowId){firstNowId='now_'+store.id+'_'+tot;rowId=` id="${firstNowId}"`;}
 html+=`<tr${rowId}${isNow?' class="now-row"':''}${showLabel?' class="half-row"':''}><td>${showLabel?lb:''}</td>`;
-rms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='booked')html+=`<td class="cell-booked">${showLabel?'<span class="cell-label">×</span>':''}</td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+rms.forEach(r=>{if(r.blocked){html+=`<td class="cell-blocked"></td>`;return;}const st=cellStatus(map[r.id],tot);if(st==='booked')html+=`<td class="cell-booked">${showLabel?'<span class="cell-label">×</span>':''}</td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
 html+=`</tr>`;
 }}
 html+=`</tbody></table></div>`;

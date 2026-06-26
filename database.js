@@ -66,6 +66,9 @@ async function initDB() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       store_id INTEGER NOT NULL DEFAULT 1,
       name TEXT NOT NULL,
+      memo TEXT DEFAULT '',
+      blocked INTEGER DEFAULT 0,
+      block_reason TEXT DEFAULT '',
       is_active INTEGER DEFAULT 1,
       sort_order INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now', 'localtime'))

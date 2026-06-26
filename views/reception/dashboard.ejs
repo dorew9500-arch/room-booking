@@ -35,6 +35,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .grid td:first-child{padding:4px 12px;font-size:13px;color:#888;background:#f9f9f9;white-space:nowrap;position:sticky;left:0}
 .cell-free{background:#fff;cursor:pointer}
 .cell-free:hover{background:#e8f5ee}
+.cell-blocked{background:repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5 4px,#e8e8e8 4px,#e8e8e8 8px);cursor:not-allowed}
+.room-memo{font-size:10px;color:#2d7a4f;font-weight:normal;margin-top:2px}
+.room-blocked{font-size:10px;color:#c0392b;font-weight:normal;margin-top:2px}
+.blk-btn{font-size:10px;padding:2px 6px;margin-top:3px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer}
 .cell-booked{background:#fde8e8}
 .cell-cleaning{background:#eee}
 .cell-label{font-size:12px;color:#c0392b;font-weight:600}
@@ -168,6 +172,10 @@ document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.tar
 function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 async function load(){const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();renderList(bk);renderGrid(bk);}
+async function toggleBlock(id,cur){
+if(cur){await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:false})});location.reload();}
+else{const reason=prompt('利用不可の理由（例: エアコン故障、清掃中）');if(reason===null)return;await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});location.reload();}
+}
 let lastBk=[];
 function renderList(bk){
 lastBk=bk;
@@ -179,7 +187,7 @@ document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,
 function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
 function isToday(){return curDate===new Date().toISOString().slice(0,10);}
 function renderGrid(bk){
-document.getElementById('gh').innerHTML='<tr><th>時間</th>'+rooms.map(r=>`<th>${r.name}</th>`).join('')+'</tr>';
+document.getElementById('gh').innerHTML='<tr><th>時間</th>'+rooms.map(r=>`<th>${r.name}${r.memo?`<div class="room-memo">${r.memo}</div>`:''}${r.blocked?`<div class="room-blocked">利用不可${r.block_reason?'：'+r.block_reason:''}</div>`:''}<br><button class="blk-btn" onclick="toggleBlock(${r.id},${r.blocked})">${r.blocked?'解除':'利用不可'}</button></th>`).join('')+'</tr>';
 const map={};rooms.forEach(r=>map[r.id]=[]);
 bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes});}});
 const ns=nowSlot();const today=isToday();
@@ -190,7 +198,7 @@ const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 const isNow=today&&ns>=tot&&ns<tot+5;
 const showLabel=(m%30===0);
 let c=`<td>${showLabel?lb:''}</td>`;
-rooms.forEach(r=>{const st=cellStatus(map[r.id],tot);if(st==='booked')c+=`<td class="cell-booked">${showLabel?'<span class="cell-label">×</span>':''}</td>`;else if(st==='cleaning')c+=`<td class="cell-cleaning"></td>`;else c+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+rooms.forEach(r=>{if(r.blocked){c+=`<td class="cell-blocked"></td>`;return;}const st=cellStatus(map[r.id],tot);if(st==='booked')c+=`<td class="cell-booked">${showLabel?'<span class="cell-label">×</span>':''}</td>`;else if(st==='cleaning')c+=`<td class="cell-cleaning"></td>`;else c+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
 rows.push(`<tr${isNow?' id="nowRow" class="now-row"':''}${showLabel?' class="half-row"':''}>${c}</tr>`);
 }}
 document.getElementById('gb').innerHTML=rows.join('');

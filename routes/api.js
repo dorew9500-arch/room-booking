@@ -43,6 +43,7 @@ router.post('/bookings', requireLogin, (req, res) => {
 
   const room = queryOne('SELECT r.*, s.cleaning_minutes FROM rooms r JOIN stores s ON r.store_id = s.id WHERE r.id = ?', [room_id]);
   if (!room) return res.status(400).json({ error: '部屋が見つかりません' });
+  if (room.blocked) return res.status(409).json({ error: `この部屋は現在利用できません${room.block_reason ? '（' + room.block_reason + '）' : ''}` });
 
   if (user.role === 'reception' && Number(room.store_id) !== Number(user.store_id)) {
     return res.status(403).json({ error: '他店舗の部屋は予約できません' });
@@ -249,9 +250,17 @@ router.post('/admin/rooms', requireAdmin, (req, res) => {
   res.json({ id: result.lastInsertRowid });
 });
 router.patch('/admin/rooms/:id', requireAdmin, (req, res) => {
-  const { is_active } = req.body;
+  const { is_active, memo } = req.body;
   if (is_active !== undefined) run('UPDATE rooms SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+  if (memo !== undefined) run('UPDATE rooms SET memo = ? WHERE id = ?', [memo, req.params.id]);
   res.json({ message: '更新しました' });
+});
+router.post('/rooms/:id/block', requireLogin, (req, res) => {
+  const role = req.session.user.role;
+  if (role !== 'admin' && role !== 'reception') return res.status(403).json({ error: '権限がありません' });
+  const { blocked, reason } = req.body;
+  run('UPDATE rooms SET blocked = ?, block_reason = ? WHERE id = ?', [blocked ? 1 : 0, reason || '', req.params.id]);
+  res.json({ message: blocked ? '利用不可にしました' : '利用可能に戻しました' });
 });
 router.post('/admin/rooms/reorder', requireAdmin, (req, res) => {
   const { order } = req.body;
