@@ -23,6 +23,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .panel-header .count{font-size:12px;color:#888;font-weight:400}
 .timeline-list{flex:1;overflow-y:auto}
 .timeline-item{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #f0f0f0;gap:8px}
+.timeline-item.hl{background:#fbf6e3;border-left:3px solid #d4a017}
+.t-storename{font-size:10px;color:#fff;background:#888;border-radius:4px;padding:2px 6px;font-weight:600;white-space:nowrap}
+.timeline-item.hl .t-storename{background:#d4a017}
+.group-label{font-size:11px;color:#999;font-weight:600;padding:8px 16px 4px;background:#fafafa;border-bottom:1px solid #f0f0f0}
 .t-time{font-size:15px;font-weight:700;min-width:48px}
 .t-store{font-size:10px;color:#999;min-width:20px}
 .t-room{background:#e8f5ee;color:#2d7a4f;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:600;min-width:36px;text-align:center}
@@ -85,7 +89,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
 <button class="day" onclick="setToday()">今日</button>
 <button class="day" onclick="setYesterday()">昨日</button>
-<select id="storeFilter" onchange="load()">
+<select id="storeFilter" onchange="rerender()">
 <option value="">全店舗</option>
 <% stores.forEach(s=>{ %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
 </select>
@@ -190,18 +194,42 @@ function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.to
 function visibleStores(){const f=document.getElementById('storeFilter').value;return f?stores.filter(s=>s.id==f):stores;}
 function roomsOf(sid){return allRooms.filter(r=>r.store_id==sid);}
 async function load(){
-const f=document.getElementById('storeFilter').value;
-const url=f?`/api/bookings?date=${curDate}&store_id=${f}`:`/api/bookings?date=${curDate}`;
-const res=await fetch(url);const bk=await res.json();
+// 一覧は常に全店舗ぶん必要なので、store_idは付けず全件取得する
+const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();
 renderList(bk);renderGrids(bk);
 }
+// セレクト変更時：再取得せず保持データで描画し直す
+function rerender(){renderList(lastBk);renderGrids(lastBk);}
 let lastBk=[];
+function bookingRow(b,hl){
+const t=b.start_at.slice(11,16);
+const nm=b.partner_code||b.client_name||'-';
+let badge='';
+if(b.extended)badge+=' <span class="ext-badge">延長済</span>';
+if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';
+return `<div class="timeline-item${hl?' hl':''}"><span class="t-time">${t}</span><span class="t-storename">${b.store_name||''}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;
+}
 function renderList(bk){
 lastBk=bk;
 document.getElementById('cnt').textContent=bk.length+'件';
 if(!bk.length){document.getElementById('list').innerHTML='<div class="empty-msg">予約はありません</div>';return;}
-const s=[...bk].sort((a,b)=>a.start_at.localeCompare(b.start_at));
-document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);const nm=b.partner_code||b.client_name||'-';let badge='';if(b.extended)badge+=' <span class="ext-badge">延長済</span>';if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;}).join('');
+const f=document.getElementById('storeFilter').value;
+const byTime=(a,b)=>a.start_at.localeCompare(b.start_at);
+if(!f){
+// 全店舗選択時：単純に時刻順
+document.getElementById('list').innerHTML=[...bk].sort(byTime).map(b=>bookingRow(b,false)).join('');
+return;
+}
+// 店舗選択時：選択店舗を上（ハイライト）、残りを下
+const sel=bk.filter(b=>b.store_id==f).sort(byTime);
+const rest=bk.filter(b=>b.store_id!=f).sort(byTime);
+let html='';
+if(sel.length)html+=sel.map(b=>bookingRow(b,true)).join('');
+if(rest.length){
+if(sel.length)html+='<div class="group-label">その他の店舗</div>';
+html+=rest.map(b=>bookingRow(b,false)).join('');
+}
+document.getElementById('list').innerHTML=html;
 }
 function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
 function isToday(){return curDate===new Date().toISOString().slice(0,10);}
