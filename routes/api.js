@@ -44,7 +44,8 @@ router.get('/booking-ids', requireLogin, (req, res) => {
   const user = req.session.user;
   const today = new Date().toISOString().slice(0, 10);
   let sql = `
-    SELECT b.id, b.start_at, r.name as room_name, r.store_id, b.partner_id
+    SELECT b.id, b.start_at, b.course_minutes, b.extended, b.shifted,
+           r.name as room_name, r.store_id, b.partner_id
     FROM bookings b
     JOIN rooms r ON b.room_id = r.id
     WHERE substr(b.start_at, 1, 10) >= ?`;
