@@ -16,7 +16,8 @@ router.get('/bookings', requireLogin, (req, res) => {
   let sql = `
     SELECT b.id, b.room_id, b.partner_id, b.client_name, b.start_at,
            b.course_minutes, b.block_minutes, b.extended, b.shifted,
-           r.name as room_name, r.store_id, s.name as store_name, p.code as partner_code
+           r.name as room_name, r.store_id, r.blocked as room_blocked, r.block_reason,
+           s.name as store_name, p.code as partner_code
     FROM bookings b
     JOIN rooms r ON b.room_id = r.id
     JOIN stores s ON r.store_id = s.id
@@ -32,7 +33,7 @@ router.get('/bookings', requireLogin, (req, res) => {
     const myId = Number(user.id);
     bookings = bookings.map(b => {
       if (Number(b.partner_id) === myId) return b;
-      return { id: b.id, room_id: b.room_id, room_name: b.room_name, store_id: b.store_id, start_at: b.start_at, course_minutes: b.course_minutes, block_minutes: b.block_minutes, is_other: true };
+      return { id: b.id, room_id: b.room_id, room_name: b.room_name, store_id: b.store_id, room_blocked: b.room_blocked, block_reason: b.block_reason, start_at: b.start_at, course_minutes: b.course_minutes, block_minutes: b.block_minutes, is_other: true };
     });
   }
   res.json(bookings);
@@ -183,6 +184,46 @@ router.post('/bookings/:id/shift', requireLogin, (req, res) => {
 
   run('UPDATE bookings SET start_at = ?, shifted = 1 WHERE id = ?', [`${datePart}T${newTime}`, b.id]);
   res.json({ message: '時間を変更しました' });
+});
+
+// 予約を同じ店舗の別の部屋へ振り替える（受付・管理者・予約者が使える・空き判定つき）
+router.post('/bookings/:id/transfer', requireLogin, (req, res) => {
+  const user = req.session.user;
+  const toRoomId = Number(req.body.to_room_id);
+  if (!toRoomId) return res.status(400).json({ error: '振り替え先の部屋を指定してください' });
+
+  const b = queryOne('SELECT b.*, r.store_id FROM bookings b JOIN rooms r ON b.room_id = r.id WHERE b.id = ?', [req.params.id]);
+  if (!b) return res.status(404).json({ error: '予約が見つかりません' });
+
+  // 権限：予約者は自分の予約のみ／受付は自店のみ
+  if (user.role === 'partner' && Number(b.partner_id) !== Number(user.id)) return res.status(403).json({ error: '振り替えできません' });
+  if (user.role === 'reception' && Number(b.store_id) !== Number(user.store_id)) return res.status(403).json({ error: '振り替えできません' });
+
+  if (Number(toRoomId) === Number(b.room_id)) return res.status(400).json({ error: '同じ部屋です' });
+
+  // 振り替え先の部屋を取得・検証
+  const toRoom = queryOne('SELECT r.*, s.cleaning_minutes FROM rooms r JOIN stores s ON r.store_id = s.id WHERE r.id = ?', [toRoomId]);
+  if (!toRoom) return res.status(404).json({ error: '振り替え先の部屋が見つかりません' });
+  if (Number(toRoom.store_id) !== Number(b.store_id)) return res.status(400).json({ error: '同じ店舗の部屋にのみ振り替えできます' });
+  if (toRoom.blocked) return res.status(409).json({ error: `振り替え先は利用不可です${toRoom.block_reason ? '（' + toRoom.block_reason + '）' : ''}` });
+  if (user.role === 'reception' && Number(toRoom.store_id) !== Number(user.store_id)) return res.status(403).json({ error: '他店舗の部屋には振り替えできません' });
+
+  // 振り替え先での清掃込み所要時間で空き判定（コースは据え置き、清掃は振り替え先店舗の設定に従う）
+  const newBlock = Number(b.course_minutes) + Number(toRoom.cleaning_minutes);
+  const startMin = toMin(b.start_at.slice(11, 16));
+  const newEnd = startMin + newBlock;
+  const datePart = b.start_at.slice(0, 10);
+  const others = query("SELECT * FROM bookings WHERE room_id = ? AND substr(start_at,1,10) = ?", [toRoomId, datePart]);
+  for (const o of others) {
+    const oStart = toMin(o.start_at.slice(11, 16));
+    const oEnd = oStart + Number(o.block_minutes);
+    if (startMin < oEnd && newEnd > oStart) {
+      return res.status(409).json({ error: '振り替え先のその時間帯は埋まっています' });
+    }
+  }
+
+  run('UPDATE bookings SET room_id = ?, block_minutes = ? WHERE id = ?', [toRoomId, newBlock, b.id]);
+  res.json({ message: `${toRoom.name} に振り替えました` });
 });
 
 router.get('/durations', requireLogin, (req, res) => {
