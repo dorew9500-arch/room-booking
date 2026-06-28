@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { requireAdmin, requireMaster, requireLogin } = require('../middleware/auth');
+const { requireAdmin, requireMaster, requireLogin, requireReception } = require('../middleware/auth');
 const { query, queryOne, run } = require('../database');
 
 // ============ 予約API（共通）============
@@ -294,6 +294,11 @@ router.patch('/admin/rooms/:id', requireAdmin, (req, res) => {
 router.post('/rooms/:id/block', requireLogin, (req, res) => {
   const role = req.session.user.role;
   if (role !== 'admin' && role !== 'reception') return res.status(403).json({ error: '権限がありません' });
+  if (role === 'reception') {
+    const room = queryOne('SELECT store_id FROM rooms WHERE id = ?', [req.params.id]);
+    if (!room) return res.status(404).json({ error: '部屋が見つかりません' });
+    if (Number(room.store_id) !== Number(req.session.user.store_id)) return res.status(403).json({ error: '自分の店舗の部屋ではありません' });
+  }
   const { blocked, reason } = req.body;
   run('UPDATE rooms SET blocked = ?, block_reason = ? WHERE id = ?', [blocked ? 1 : 0, reason || '', req.params.id]);
   res.json({ message: blocked ? '利用不可にしました' : '利用可能に戻しました' });
@@ -310,6 +315,60 @@ router.delete('/admin/rooms/:id', requireAdmin, (req, res) => {
   run('DELETE FROM rooms WHERE id = ?', [req.params.id]);
   res.json({ message: '削除しました' });
 });
+
+// ============ 受付用 部屋管理（自店のみ）============
+// 対象の部屋が受付の自店舗かを検証するヘルパー。OKならroomを返し、NGならnull。
+function receptionRoomGuard(req, res) {
+  const room = queryOne('SELECT * FROM rooms WHERE id = ?', [req.params.id]);
+  if (!room) { res.status(404).json({ error: '部屋が見つかりません' }); return null; }
+  if (Number(room.store_id) !== Number(req.session.user.store_id)) {
+    res.status(403).json({ error: '自分の店舗の部屋ではありません' }); return null;
+  }
+  return room;
+}
+
+// 自店の部屋一覧
+router.get('/reception/rooms', requireReception, (req, res) => {
+  res.json(query('SELECT * FROM rooms WHERE store_id = ? ORDER BY sort_order', [req.session.user.store_id]));
+});
+// 自店に部屋追加（store_idはセッションから強制。リクエストのstore_idは無視）
+router.post('/reception/rooms', requireReception, (req, res) => {
+  const { name } = req.body;
+  if (!name || !String(name).trim()) return res.status(400).json({ error: '部屋番号を入力してください' });
+  const storeId = req.session.user.store_id;
+  const max = queryOne('SELECT MAX(sort_order) as m FROM rooms WHERE store_id = ?', [storeId]);
+  const result = run('INSERT INTO rooms (store_id, name, sort_order) VALUES (?,?,?)', [storeId, String(name).trim(), (max?.m || 0) + 1]);
+  res.json({ id: result.lastInsertRowid });
+});
+// 名前/メモ/有効無効の更新（自店のみ）
+router.patch('/reception/rooms/:id', requireReception, (req, res) => {
+  if (!receptionRoomGuard(req, res)) return;
+  const { name, memo, is_active } = req.body;
+  if (name !== undefined) { if (!String(name).trim()) return res.status(400).json({ error: '部屋番号を入力してください' }); run('UPDATE rooms SET name = ? WHERE id = ?', [String(name).trim(), req.params.id]); }
+  if (memo !== undefined) run('UPDATE rooms SET memo = ? WHERE id = ?', [memo, req.params.id]);
+  if (is_active !== undefined) run('UPDATE rooms SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+  res.json({ message: '更新しました' });
+});
+// 並べ替え（自店の部屋のみ受け付ける）
+router.post('/reception/rooms/reorder', requireReception, (req, res) => {
+  const { order } = req.body;
+  if (!Array.isArray(order)) return res.status(400).json({ error: '順番データが不正です' });
+  const storeId = Number(req.session.user.store_id);
+  order.forEach((roomId, i) => {
+    const r = queryOne('SELECT store_id FROM rooms WHERE id = ?', [roomId]);
+    if (r && Number(r.store_id) === storeId) run('UPDATE rooms SET sort_order = ? WHERE id = ?', [i + 1, roomId]);
+  });
+  res.json({ message: '並び順を保存しました' });
+});
+// 削除（自店のみ。予約があれば非表示）
+router.delete('/reception/rooms/:id', requireReception, (req, res) => {
+  if (!receptionRoomGuard(req, res)) return;
+  const hasBooking = queryOne('SELECT id FROM bookings WHERE room_id = ?', [req.params.id]);
+  if (hasBooking) { run('UPDATE rooms SET is_active = 0 WHERE id = ?', [req.params.id]); return res.json({ message: '予約があるため非表示にしました' }); }
+  run('DELETE FROM rooms WHERE id = ?', [req.params.id]);
+  res.json({ message: '削除しました' });
+});
+
 
 router.get('/admin/partners', requireAdmin, (req, res) => res.json(query('SELECT id, code, name, login_id, is_active FROM partners ORDER BY code')));
 router.post('/admin/partners', requireAdmin, (req, res) => {
