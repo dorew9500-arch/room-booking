@@ -38,6 +38,23 @@ router.get('/bookings', requireLogin, (req, res) => {
   res.json(bookings);
 });
 
+// 新規予約の通知検知用：自分（自店舗/自分）の予約IDだけを軽量に返す。
+// 過去は通知不要なので今日以降に限定。start_atも返し、新着の中身表示に使う。
+router.get('/booking-ids', requireLogin, (req, res) => {
+  const user = req.session.user;
+  const today = new Date().toISOString().slice(0, 10);
+  let sql = `
+    SELECT b.id, b.start_at, r.name as room_name, r.store_id, b.partner_id
+    FROM bookings b
+    JOIN rooms r ON b.room_id = r.id
+    WHERE substr(b.start_at, 1, 10) >= ?`;
+  const params = [today];
+  if (user.role === 'reception') { sql += ' AND r.store_id = ?'; params.push(user.store_id); }
+  if (user.role === 'partner') { sql += ' AND b.partner_id = ?'; params.push(user.id); }
+  sql += ' ORDER BY b.id';
+  res.json(query(sql, params));
+});
+
 router.post('/bookings', requireLogin, (req, res) => {
   const { room_id, start_at, course_minutes, partner_code, client_name } = req.body;
   const user = req.session.user;
