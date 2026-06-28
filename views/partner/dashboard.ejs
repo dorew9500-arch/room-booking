@@ -180,25 +180,43 @@ let curDate=document.getElementById('dateInput').value;
 document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.target.value;load();});
 function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
-function storesInArea(areaId){return stores.filter(s=>(s.tagIds||[]).includes(areaId));}
+// 「その他」= どのエリアにも属さない店舗
+function unassignedStores(){return stores.filter(s=>!(s.tagIds||[]).length);}
+// 指定エリアの店舗（'other' は未所属店）
+function storesInArea(areaId){
+if(areaId==='other')return unassignedStores();
+return stores.filter(s=>(s.tagIds||[]).includes(areaId));
+}
+// 画面に出すエリア一覧（実エリア＋未所属店があれば末尾に「その他」）
+function navAreas(){
+const list=areas.slice();
+if(unassignedStores().length)list.push({id:'other',name:'その他'});
+return list;
+}
 function pickArea(id){selectedArea=id;selectedStore=null;const ss=storesInArea(id);if(ss.length===1){selectedStore=ss[0].id;}renderNav();load();}
 function pickStore(id){selectedStore=id;renderNav();load();}
 function backToAreas(){selectedArea=null;selectedStore=null;renderNav();load();}
 function backToStores(){selectedStore=null;renderNav();load();}
 function renderNav(){
 const nav=document.getElementById('navbar');
+const navAs=navAreas();
 if(selectedArea===null){
 // エリア選択
-if(areas.length===1){selectedArea=areas[0].id;const ss=storesInArea(selectedArea);if(ss.length===1)selectedStore=ss[0].id;renderNav();return;}
-nav.innerHTML='<span class="nav-label">エリアを選択:</span>'+areas.map(a=>`<button class="nav-chip" onclick="pickArea(${a.id})">${a.name}</button>`).join('');
+if(navAs.length===0){
+// エリアも未所属店もない（理論上ほぼ無いが保険）：全店舗から選ばせる
+nav.innerHTML='<span class="nav-label">店舗を選択:</span>'+stores.map(s=>`<button class="nav-chip" onclick="pickStore(${s.id})">${s.name}</button>`).join('');
+return;
+}
+if(navAs.length===1){selectedArea=navAs[0].id;const ss=storesInArea(selectedArea);if(ss.length===1)selectedStore=ss[0].id;renderNav();return;}
+nav.innerHTML='<span class="nav-label">エリアを選択:</span>'+navAs.map(a=>`<button class="nav-chip" onclick="pickArea(${typeof a.id==='string'?`'${a.id}'`:a.id})">${a.name}</button>`).join('');
 }else if(selectedStore===null){
 // 店舗選択
-const a=areas.find(x=>x.id===selectedArea);
+const a=navAs.find(x=>x.id===selectedArea);
 const ss=storesInArea(selectedArea);
 nav.innerHTML=`<button class="nav-back" onclick="backToAreas()">← エリア選択</button><span class="nav-current">${a?a.name:''}</span><span class="nav-sep">›</span><span class="nav-label">店舗を選択:</span>`+(ss.length?ss.map(s=>`<button class="nav-chip" onclick="pickStore(${s.id})">${s.name}</button>`).join(''):'<span style="color:#aaa;font-size:13px">店舗がありません</span>');
 }else{
 // グリッド表示中
-const a=areas.find(x=>x.id===selectedArea);
+const a=navAs.find(x=>x.id===selectedArea);
 const s=stores.find(x=>x.id===selectedStore);
 const ss=storesInArea(selectedArea);
 let back='';
