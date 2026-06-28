@@ -89,7 +89,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
 <button class="day" onclick="setToday()">今日</button>
 <button class="day" onclick="setYesterday()">昨日</button>
-<button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#c0392b;color:#c0392b">🔔 通知OFF</button>
+<button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#e67e22;color:#e67e22">🔔 通知（画面を触ると開始）</button>
 <select id="storeFilter" onchange="rerender()">
 <option value="">店舗を選択…</option>
 <% stores.forEach(s=>{ %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
@@ -306,23 +306,30 @@ document.getElementById('mo').addEventListener('click',e=>{if(e.target===documen
 // ===== 予約 通知システム（新規/削除/変更を音で区別・マリンバ音色）=====
 const VOL=0.85;
 let notifyOn=false;
+let userDisabled=false;
 let snapMap=null;
 let audioCtx=null;
 let titleBlink=null;
 const baseTitle=document.title;
 
-function toggleNotify(){
-notifyOn=!notifyOn;
+function enableNotify(playTest){
+try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
+if(audioCtx&&audioCtx.state==='suspended'){try{audioCtx.resume();}catch(e){}}
+notifyOn=true;userDisabled=false;
 const btn=document.getElementById('notifyBtn');
-if(notifyOn){
-try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
 btn.textContent='🔔 通知ON';btn.style.borderColor='#2d7a4f';btn.style.color='#2d7a4f';
-soundNew();
-}else{
+if(playTest)soundNew();
+}
+function disableNotify(){
+notifyOn=false;userDisabled=true;
+const btn=document.getElementById('notifyBtn');
 btn.textContent='🔔 通知OFF';btn.style.borderColor='#c0392b';btn.style.color='#c0392b';
 stopBlink();
 }
-}
+function toggleNotify(){if(notifyOn)disableNotify();else enableNotify(true);}
+function autoEnableOnce(){if(!notifyOn&&!userDisabled)enableNotify(false);}
+document.addEventListener('click',autoEnableOnce);
+document.addEventListener('touchstart',autoEnableOnce,{passive:true});
 function tone(freq,delay,dur,mul){
 if(!audioCtx)return;
 try{
