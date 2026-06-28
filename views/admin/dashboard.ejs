@@ -89,6 +89,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
 <button class="day" onclick="setToday()">今日</button>
 <button class="day" onclick="setYesterday()">昨日</button>
+<button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#c0392b;color:#c0392b">🔔 通知OFF</button>
 <select id="storeFilter" onchange="rerender()">
 <option value="">全店舗</option>
 <% stores.forEach(s=>{ %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
@@ -295,7 +296,83 @@ closeM();load();
 }
 async function delB(id){if(!confirm('削除しますか？'))return;await fetch(`/api/bookings/${id}`,{method:'DELETE'});load();}function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
 document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
+
+// ===== 予約 通知システム（新規/削除/変更を音で区別・マリンバ音色）=====
+const VOL=0.85;
+let notifyOn=false;
+let snapMap=null;
+let audioCtx=null;
+let titleBlink=null;
+const baseTitle=document.title;
+
+function toggleNotify(){
+notifyOn=!notifyOn;
+const btn=document.getElementById('notifyBtn');
+if(notifyOn){
+try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
+btn.textContent='🔔 通知ON';btn.style.borderColor='#2d7a4f';btn.style.color='#2d7a4f';
+soundNew();
+}else{
+btn.textContent='🔔 通知OFF';btn.style.borderColor='#c0392b';btn.style.color='#c0392b';
+stopBlink();
+}
+}
+function tone(freq,delay,dur,mul){
+if(!audioCtx)return;
+try{
+const t=audioCtx.currentTime+delay;
+const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+o.connect(g);g.connect(audioCtx.destination);
+o.type='triangle';o.frequency.value=freq;
+const peak=Math.max(VOL*mul,0.0002);
+g.gain.setValueAtTime(0.0001,t);
+g.gain.exponentialRampToValueAtTime(peak,t+0.012);
+g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+o.start(t);o.stop(t+dur+0.02);
+}catch(e){}
+}
+function soundNew(){tone(587,0,0.45,1.0);tone(784,0.12,0.45,1.0);tone(988,0.24,0.6,1.0);}
+function soundDel(){tone(784,0,0.4,0.9);tone(587,0.12,0.5,0.9);tone(440,0.24,0.6,0.9);}
+function soundChg(){tone(660,0,0.3,0.9);}
+
+function flashBadge(color){
+const c=document.getElementById('cnt');
+c.style.transition='none';c.style.background=color;c.style.color='#fff';c.style.borderRadius='6px';c.style.padding='2px 8px';
+setTimeout(()=>{c.style.transition='all 1.2s';c.style.background='';c.style.color='';},80);
+}
+function startBlink(msg){
+stopBlink();let on=true;
+titleBlink=setInterval(()=>{document.title=on?`🔴 ${msg}`:baseTitle;on=!on;},700);
+}
+function stopBlink(){if(titleBlink){clearInterval(titleBlink);titleBlink=null;document.title=baseTitle;}}
+window.addEventListener('focus',stopBlink);
+document.addEventListener('click',()=>{if(titleBlink)stopBlink();});
+
+function snapKey(r){return `${r.start_at}|${r.course_minutes}|${r.extended}|${r.shifted}`;}
+
+async function checkNew(){
+try{
+const res=await fetch('/api/booking-ids');
+if(!res.ok)return;
+const rows=await res.json();
+const cur=new Map();rows.forEach(r=>cur.set(r.id,snapKey(r)));
+if(snapMap===null){snapMap=cur;return;}
+let added=0,removed=0,changed=0;
+cur.forEach((key,id)=>{if(!snapMap.has(id))added++;else if(snapMap.get(id)!==key)changed++;});
+snapMap.forEach((key,id)=>{if(!cur.has(id))removed++;});
+snapMap=cur;
+if(notifyOn&&(added||removed||changed)){
+if(added){soundNew();flashBadge('#2d7a4f');startBlink(`新規予約 ${added}件`);}
+else if(removed){soundDel();flashBadge('#c0392b');startBlink(`予約削除 ${removed}件`);}
+else if(changed){soundChg();flashBadge('#1976d2');startBlink(`予約変更 ${changed}件`);}
+load();
+}
+}catch(e){}
+}
+// ===== ここまで通知システム =====
+
 load();setInterval(load,30000);
+checkNew();setInterval(checkNew,30000);
 </script>
 </body>
 </html>
