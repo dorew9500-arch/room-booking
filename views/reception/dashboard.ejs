@@ -80,7 +80,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
 <button class="day" onclick="setToday()">今日</button>
 <button class="day" onclick="setYesterday()">昨日</button>
-<button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#c0392b;color:#c0392b">🔔 通知OFF</button>
+<button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#e67e22;color:#e67e22">🔔 通知（画面を触ると開始）</button>
 <div class="spacer"></div>
 <a href="/reception/rooms" style="font-size:13px;color:#2d7a4f;text-decoration:none;padding:6px 12px;border:1px solid #2d7a4f;border-radius:6px">部屋管理</a>
 <form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
@@ -247,24 +247,36 @@ document.getElementById('mo').addEventListener('click',e=>{if(e.target===documen
 
 // ===== 予約 通知システム（新規/削除/変更を音で区別・マリンバ音色）=====
 const VOL=0.85;                // 通知音の音量（0〜1。最大1.0）
-let notifyOn=false;            // 通知ON/OFF
+let notifyOn=false;            // 通知が実際に有効か（音の許可が取れてON状態か）
+let userDisabled=false;        // ユーザーが手動でOFFにしたか（trueなら自動ONしない）
 let snapMap=null;              // 既知の予約スナップショット（id -> 文字列化した状態）。初回はnull
 let audioCtx=null;             // 音声コンテキスト
 let titleBlink=null;           // タブ点滅タイマー
 const baseTitle=document.title;
 
-function toggleNotify(){
-notifyOn=!notifyOn;
+// 通知を有効化（音の許可を取る）。ユーザー操作のタイミングで呼ぶ必要がある。
+function enableNotify(playTest){
+try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
+if(audioCtx&&audioCtx.state==='suspended'){try{audioCtx.resume();}catch(e){}}
+notifyOn=true;userDisabled=false;
 const btn=document.getElementById('notifyBtn');
-if(notifyOn){
-try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
 btn.textContent='🔔 通知ON';btn.style.borderColor='#2d7a4f';btn.style.color='#2d7a4f';
-soundNew(); // テスト鳴動
-}else{
+if(playTest)soundNew();
+}
+function disableNotify(){
+notifyOn=false;userDisabled=true;
+const btn=document.getElementById('notifyBtn');
 btn.textContent='🔔 通知OFF';btn.style.borderColor='#c0392b';btn.style.color='#c0392b';
 stopBlink();
 }
+// ボタンを押したとき：ON⇔OFF切替（ONにするときはテスト音を鳴らす）
+function toggleNotify(){if(notifyOn)disableNotify();else enableNotify(true);}
+// 画面を最初に触ったら自動的に通知ON（手動OFF済みなら何もしない）。音の許可はこの操作で取れる。
+function autoEnableOnce(){
+if(!notifyOn&&!userDisabled)enableNotify(false); // 自動ONは無音（驚かせない）
 }
+document.addEventListener('click',autoEnableOnce);
+document.addEventListener('touchstart',autoEnableOnce,{passive:true});
 // 1音（マリンバ＝triangle波）。freq:周波数 delay:開始遅延 dur:長さ mul:音量倍率
 function tone(freq,delay,dur,mul){
 if(!audioCtx)return;
