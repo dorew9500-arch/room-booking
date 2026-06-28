@@ -264,6 +264,7 @@ btn.textContent='🔔 通知OFF';btn.style.borderColor='#c0392b';btn.style.color
 stopBlink();
 }
 }
+const VOL=0.85; // 通知音の音量（0〜1。最大1.0。大きくしたいときはここを上げる）
 function beep(){
 if(!audioCtx)return;
 try{
@@ -271,11 +272,11 @@ const o=audioCtx.createOscillator();const g=audioCtx.createGain();
 o.connect(g);g.connect(audioCtx.destination);
 o.type='sine';o.frequency.value=880;
 g.gain.setValueAtTime(0.001,audioCtx.currentTime);
-g.gain.exponentialRampToValueAtTime(0.3,audioCtx.currentTime+0.01);
+g.gain.exponentialRampToValueAtTime(VOL,audioCtx.currentTime+0.01);
 g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);
 o.start();o.stop(audioCtx.currentTime+0.36);
 // 2回鳴らす（ピコッ・ピコッ）
-setTimeout(()=>{try{const o2=audioCtx.createOscillator();const g2=audioCtx.createGain();o2.connect(g2);g2.connect(audioCtx.destination);o2.type='sine';o2.frequency.value=1100;g2.gain.setValueAtTime(0.001,audioCtx.currentTime);g2.gain.exponentialRampToValueAtTime(0.3,audioCtx.currentTime+0.01);g2.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);o2.start();o2.stop(audioCtx.currentTime+0.36);}catch(e){}},180);
+setTimeout(()=>{try{const o2=audioCtx.createOscillator();const g2=audioCtx.createGain();o2.connect(g2);g2.connect(audioCtx.destination);o2.type='sine';o2.frequency.value=1100;g2.gain.setValueAtTime(0.001,audioCtx.currentTime);g2.gain.exponentialRampToValueAtTime(VOL,audioCtx.currentTime+0.01);g2.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);o2.start();o2.stop(audioCtx.currentTime+0.36);}catch(e){}},180);
 }catch(e){}
 }
 function flashBadge(){
