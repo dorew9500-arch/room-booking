@@ -11,4 +11,9 @@ router.get('/', requireReception, (req, res) => {
   res.render('reception/dashboard', { user: req.session.user, rooms, partners, durations });
 });
 
+// 受付の部屋管理ページ（自店のみ）
+router.get('/rooms', requireReception, (req, res) => {
+  res.render('reception/rooms', { user: req.session.user });
+});
+
 module.exports = router;
