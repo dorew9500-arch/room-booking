@@ -244,9 +244,10 @@ async function delB(id){if(!confirm('削除しますか？'))return;await fetch(
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
 document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
 
-// ===== 新規予約 通知システム =====
+// ===== 予約 通知システム（新規/削除/変更を音で区別・マリンバ音色）=====
+const VOL=0.85;                // 通知音の音量（0〜1。最大1.0）
 let notifyOn=false;            // 通知ON/OFF
-let knownIds=null;             // 既知の予約IDの集合（初回はnull）
+let snapMap=null;              // 既知の予約スナップショット（id -> 文字列化した状態）。初回はnull
 let audioCtx=null;             // 音声コンテキスト
 let titleBlink=null;           // タブ点滅タイマー
 const baseTitle=document.title;
@@ -255,56 +256,77 @@ function toggleNotify(){
 notifyOn=!notifyOn;
 const btn=document.getElementById('notifyBtn');
 if(notifyOn){
-// 音の自動再生制限を解除するため、ユーザー操作のこのタイミングでAudioContextを作る
 try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
 btn.textContent='🔔 通知ON';btn.style.borderColor='#2d7a4f';btn.style.color='#2d7a4f';
-beep(); // テスト鳴動（ONになったのが分かる）
+soundNew(); // テスト鳴動
 }else{
 btn.textContent='🔔 通知OFF';btn.style.borderColor='#c0392b';btn.style.color='#c0392b';
 stopBlink();
 }
 }
-const VOL=0.85; // 通知音の音量（0〜1。最大1.0。大きくしたいときはここを上げる）
-function beep(){
+// 1音（マリンバ＝triangle波）。freq:周波数 delay:開始遅延 dur:長さ mul:音量倍率
+function tone(freq,delay,dur,mul){
 if(!audioCtx)return;
 try{
+const t=audioCtx.currentTime+delay;
 const o=audioCtx.createOscillator();const g=audioCtx.createGain();
 o.connect(g);g.connect(audioCtx.destination);
-o.type='sine';o.frequency.value=880;
-g.gain.setValueAtTime(0.001,audioCtx.currentTime);
-g.gain.exponentialRampToValueAtTime(VOL,audioCtx.currentTime+0.01);
-g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);
-o.start();o.stop(audioCtx.currentTime+0.36);
-// 2回鳴らす（ピコッ・ピコッ）
-setTimeout(()=>{try{const o2=audioCtx.createOscillator();const g2=audioCtx.createGain();o2.connect(g2);g2.connect(audioCtx.destination);o2.type='sine';o2.frequency.value=1100;g2.gain.setValueAtTime(0.001,audioCtx.currentTime);g2.gain.exponentialRampToValueAtTime(VOL,audioCtx.currentTime+0.01);g2.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);o2.start();o2.stop(audioCtx.currentTime+0.36);}catch(e){}},180);
+o.type='triangle';o.frequency.value=freq;
+const peak=Math.max(VOL*mul,0.0002);
+g.gain.setValueAtTime(0.0001,t);
+g.gain.exponentialRampToValueAtTime(peak,t+0.012);
+g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+o.start(t);o.stop(t+dur+0.02);
 }catch(e){}
 }
-function flashBadge(){
+// 新規：マリンバ上昇（ポロロン♪）
+function soundNew(){tone(587,0,0.45,1.0);tone(784,0.12,0.45,1.0);tone(988,0.24,0.6,1.0);}
+// 削除：マリンバ下降（ロロン↓）
+function soundDel(){tone(784,0,0.4,0.9);tone(587,0.12,0.5,0.9);tone(440,0.24,0.6,0.9);}
+// 変更（延長・時間ずらし）：軽い単音（ポン）
+function soundChg(){tone(660,0,0.3,0.9);}
+
+function flashBadge(color){
 const c=document.getElementById('cnt');
-c.style.transition='none';c.style.background='#2d7a4f';c.style.color='#fff';c.style.borderRadius='6px';c.style.padding='2px 8px';
+c.style.transition='none';c.style.background=color;c.style.color='#fff';c.style.borderRadius='6px';c.style.padding='2px 8px';
 setTimeout(()=>{c.style.transition='all 1.2s';c.style.background='';c.style.color='';},80);
 }
-function startBlink(n){
+function startBlink(msg){
 stopBlink();
 let on=true;
-titleBlink=setInterval(()=>{document.title=on?`🔴 新規予約 ${n}件`:baseTitle;on=!on;},700);
+titleBlink=setInterval(()=>{document.title=on?`🔴 ${msg}`:baseTitle;on=!on;},700);
 }
 function stopBlink(){if(titleBlink){clearInterval(titleBlink);titleBlink=null;document.title=baseTitle;}}
-// 画面を見たら点滅を止める
 window.addEventListener('focus',stopBlink);
 document.addEventListener('click',()=>{if(titleBlink)stopBlink();});
+
+// 1予約の状態を1つの文字列にする（変化検知用）
+function snapKey(r){return `${r.start_at}|${r.course_minutes}|${r.extended}|${r.shifted}`;}
 
 async function checkNew(){
 try{
 const res=await fetch('/api/booking-ids');
 if(!res.ok)return;
 const rows=await res.json();
-const ids=rows.map(r=>r.id);
-if(knownIds===null){knownIds=new Set(ids);return;} // 初回は記録だけ（鳴らさない）
-const fresh=rows.filter(r=>!knownIds.has(r.id));
-ids.forEach(id=>knownIds.add(id));
-if(fresh.length&&notifyOn){
-beep();flashBadge();startBlink(fresh.length);
+const cur=new Map();rows.forEach(r=>cur.set(r.id,snapKey(r)));
+if(snapMap===null){snapMap=cur;return;} // 初回は記録だけ（鳴らさない）
+
+let added=0,removed=0,changed=0;
+// 新規・変更を判定
+cur.forEach((key,id)=>{
+if(!snapMap.has(id))added++;
+else if(snapMap.get(id)!==key)changed++;
+});
+// 削除を判定
+snapMap.forEach((key,id)=>{if(!cur.has(id))removed++;});
+
+snapMap=cur; // スナップショット更新
+
+if(notifyOn&&(added||removed||changed)){
+// 優先度：新規 > 削除 > 変更（同時に起きたら新規を優先して鳴らす）
+if(added){soundNew();flashBadge('#2d7a4f');startBlink(`新規予約 ${added}件`);}
+else if(removed){soundDel();flashBadge('#c0392b');startBlink(`予約削除 ${removed}件`);}
+else if(changed){soundChg();flashBadge('#1976d2');startBlink(`予約変更 ${changed}件`);}
 load(); // 一覧も即更新
 }
 }catch(e){}
@@ -315,6 +337,7 @@ load();
 setInterval(load,30000);
 checkNew();
 setInterval(checkNew,30000);
+
 
 </script>
 </body>
