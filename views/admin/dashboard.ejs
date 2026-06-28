@@ -34,6 +34,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .t-name{color:#333;font-size:13px;flex:1}
 .t-del{color:#c0392b;font-size:12px;cursor:pointer;border:none;background:none;padding:2px 6px;border-radius:4px}
 .t-del:hover{background:#fef2f2}
+.timeline-item.row-blocked{background:#fef2f2;border-left:3px solid #c0392b}
+.blk-warn{font-size:11px;color:#c0392b;font-weight:600;margin-top:2px}
+.t-transfer{color:#7b1fa2;font-size:12px;cursor:pointer;border:1px solid #e1c5ef;background:#faf5fd;padding:2px 7px;border-radius:4px}
+.transfer-room-btn{width:100%;text-align:left;padding:12px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:15px;cursor:pointer;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.transfer-room-btn:hover:not(:disabled){border-color:#2d7a4f;background:#f3faf6}
+.transfer-room-btn:disabled{background:#f5f5f5;color:#aaa;cursor:not-allowed}
+.transfer-room-btn .st{font-size:12px}
+.st-free{color:#2d7a4f}.st-busy{color:#c0392b}.st-blocked{color:#999}
 .empty-msg{padding:32px;text-align:center;color:#aaa;font-size:13px}
 .grid-scroll{flex:1;overflow:auto;padding:8px}
 .store-block{margin-bottom:20px}
@@ -182,6 +190,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 </div>
 </div>
+<div class="modal-overlay" id="transferMo">
+<div class="modal">
+<h2>別の部屋へ振り替え</h2>
+<p class="msub" id="transferSub"></p>
+<div id="transferRooms"></div>
+<div class="error-msg" id="transferErr"></div>
+<div class="warn-msg">振り替えたら、お店にも電話で部屋の変更を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeTransfer()">閉じる</button>
+</div>
+</div>
+</div>
 <script>
 const stores=<%- JSON.stringify(stores) %>;
 const allRooms=<%- JSON.stringify(rooms) %>;
@@ -208,7 +228,10 @@ const nm=b.partner_code||b.client_name||'-';
 let badge='';
 if(b.extended)badge+=' <span class="ext-badge">延長済</span>';
 if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';
-return `<div class="timeline-item${hl?' hl':''}"><span class="t-time">${t}</span><span class="t-storename">${b.store_name||''}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;
+const blk=b.room_blocked;
+const warn=blk?`<div class="blk-warn">⚠️利用不可の部屋${b.block_reason?'：'+b.block_reason:''}</div>`:'';
+const transferBtn=blk?`<button class="t-transfer" onclick="openTransfer(${b.id})">振替</button>`:'';
+return `<div class="timeline-item${hl?' hl':''}${blk?' row-blocked':''}"><span class="t-time">${t}</span><span class="t-storename">${b.store_name||''}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}${warn}</span>${transferBtn}<button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;
 }
 function renderList(bk){
 lastBk=bk;
@@ -302,6 +325,55 @@ closeM();load();
 }
 async function delB(id){if(!confirm('削除しますか？'))return;await fetch(`/api/bookings/${id}`,{method:'DELETE'});load();}function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
 document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
+
+// ===== 延長 =====
+let extId=null,extAdd=null;
+function openExt(id){extId=id;extAdd=null;const b=lastBk.find(x=>x.id===id);document.getElementById('extSub').textContent=b?`${b.store_name||''} ${b.room_name} / ${b.start_at.slice(11,16)} 開始 / 現在${b.course_minutes}分`:'';document.getElementById('extBtns').innerHTML=[10,20,30,60].map(m=>`<button class="ext-btn" onclick="selExt(this,${m})">+${m}分</button>`).join('');document.getElementById('extManual').value='';document.getElementById('extErr').style.display='none';document.getElementById('extMo').classList.add('open');}
+function selExt(btn,m){document.querySelectorAll('.ext-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');extAdd=m;document.getElementById('extManual').value='';}
+function closeExt(){document.getElementById('extMo').classList.remove('open');}
+async function doExtend(){const man=parseInt(document.getElementById('extManual').value);let add;if(extAdd)add=extAdd;else if(!isNaN(man)&&man>0)add=man;else{document.getElementById('extErr').textContent='延長時間を選んでください';document.getElementById('extErr').style.display='block';return;}const res=await fetch(`/api/bookings/${extId}/extend`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({add_minutes:add})});const d=await res.json();if(!res.ok){document.getElementById('extErr').textContent=d.error;document.getElementById('extErr').style.display='block';return;}closeExt();load();}
+document.getElementById('extMo').addEventListener('click',e=>{if(e.target===document.getElementById('extMo'))closeExt();});
+
+// ===== 時間をずらす =====
+let shiftId=null;
+function openShift(id){shiftId=id;const b=lastBk.find(x=>x.id===id);document.getElementById('shiftSub').textContent=b?`${b.store_name||''} ${b.room_name} / 現在 ${b.start_at.slice(11,16)} 開始`:'';document.getElementById('shiftTime').value=b?b.start_at.slice(11,16):'';document.getElementById('shiftErr').style.display='none';document.getElementById('shiftMo').classList.add('open');}
+function closeShift(){document.getElementById('shiftMo').classList.remove('open');}
+async function doShift(){const t=document.getElementById('shiftTime').value;if(!t){document.getElementById('shiftErr').textContent='時刻を入力してください';document.getElementById('shiftErr').style.display='block';return;}const res=await fetch(`/api/bookings/${shiftId}/shift`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_time:t})});const d=await res.json();if(!res.ok){document.getElementById('shiftErr').textContent=d.error;document.getElementById('shiftErr').style.display='block';return;}closeShift();load();}
+document.getElementById('shiftMo').addEventListener('click',e=>{if(e.target===document.getElementById('shiftMo'))closeShift();});
+
+// ===== 振り替え =====
+let transferId=null;
+function overlaps(aStart,aEnd,bStart,bEnd){return aStart<bEnd&&aEnd>bStart;}
+function openTransfer(id){
+transferId=id;
+const b=lastBk.find(x=>x.id===id);
+if(!b)return;
+document.getElementById('transferSub').textContent=`${b.store_name||''} / ${b.start_at.slice(11,16)} 開始 / ${b.course_minutes}分 / 現在「${b.room_name}」（利用不可）`;
+document.getElementById('transferErr').style.display='none';
+const startMin=tm(b.start_at.slice(11,16));
+const candidates=allRooms.filter(r=>r.store_id==b.store_id&&r.id!=b.room_id);
+const html=candidates.map(r=>{
+let status,cls,disabled='';
+if(r.blocked){status='利用不可';cls='st-blocked';disabled='disabled';}
+else{
+const end=startMin+b.course_minutes;
+const busy=lastBk.some(o=>o.room_id==r.id&&o.id!=b.id&&overlaps(startMin,end,tm(o.start_at.slice(11,16)),tm(o.start_at.slice(11,16))+o.block_minutes));
+if(busy){status='その時間は埋まっています';cls='st-busy';disabled='disabled';}
+else{status='空き';cls='st-free';}
+}
+return `<button class="transfer-room-btn" ${disabled} onclick="doTransfer(${r.id})"><span>${r.name}</span><span class="st ${cls}">${status}</span></button>`;
+}).join('');
+document.getElementById('transferRooms').innerHTML=html||'<div class="empty-msg">振り替えできる部屋がありません</div>';
+document.getElementById('transferMo').classList.add('open');
+}
+function closeTransfer(){document.getElementById('transferMo').classList.remove('open');}
+async function doTransfer(toRoomId){
+const res=await fetch(`/api/bookings/${transferId}/transfer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_room_id:toRoomId})});
+const d=await res.json();
+if(!res.ok){const e=document.getElementById('transferErr');e.textContent=d.error;e.style.display='block';return;}
+closeTransfer();load();
+}
+document.getElementById('transferMo').addEventListener('click',e=>{if(e.target===document.getElementById('transferMo'))closeTransfer();});
 
 // ===== 予約 通知システム（新規/削除/変更を音で区別・マリンバ音色）=====
 const VOL=0.85;
