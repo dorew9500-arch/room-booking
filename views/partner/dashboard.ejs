@@ -180,12 +180,16 @@ let curDate=document.getElementById('dateInput').value;
 document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.target.value;load();});
 function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
 function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
-// 「その他」= どのエリアにも属さない店舗
-function unassignedStores(){return stores.filter(s=>!(s.tagIds||[]).length);}
+// 実在するエリアIDの集合（area_tablesに無いtag_idは孤児として無視する）
+const validAreaIds=new Set(areas.map(a=>a.id));
+// 店舗の「有効な」エリアタグ（実在エリアのみ）
+function validTagIds(s){return (s.tagIds||[]).filter(id=>validAreaIds.has(id));}
+// 「その他」= 有効なエリアにひとつも属さない店舗
+function unassignedStores(){return stores.filter(s=>validTagIds(s).length===0);}
 // 指定エリアの店舗（'other' は未所属店）
 function storesInArea(areaId){
 if(areaId==='other')return unassignedStores();
-return stores.filter(s=>(s.tagIds||[]).includes(areaId));
+return stores.filter(s=>validTagIds(s).includes(areaId));
 }
 // 画面に出すエリア一覧（実エリア＋未所属店があれば末尾に「その他」）
 function navAreas(){
