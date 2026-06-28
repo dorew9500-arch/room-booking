@@ -89,6 +89,14 @@ router.delete('/bookings/:id', requireLogin, (req, res) => {
   if (user.role === 'reception' && Number(booking.store_id) !== Number(user.store_id)) {
     return res.status(403).json({ error: '削除できません' });
   }
+  // 過去（昨日以前）の予約は管理者のみ削除可。受付・予約者は不可。
+  if (user.role !== 'admin') {
+    const bookingDate = String(booking.start_at).slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    if (bookingDate < today) {
+      return res.status(403).json({ error: '過去の予約は管理者のみ削除できます' });
+    }
+  }
   run('DELETE FROM bookings WHERE id = ?', [req.params.id]);
   res.json({ message: '削除しました' });
 });
