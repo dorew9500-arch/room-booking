@@ -219,10 +219,12 @@ const mine=bk.filter(b=>!b.is_other);
 document.getElementById('cnt').textContent=mine.length+'件';
 if(!mine.length){document.getElementById('list').innerHTML='<div class="empty-msg">予約はありません</div>';return;}
 const s=[...mine].sort((a,b)=>a.start_at.localeCompare(b.start_at));
-document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);let badge='';if(b.extended)badge+=' <span class="ext-badge">延長済</span>';if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;}).join('');
+const past=isPast();
+document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);let badge='';if(b.extended)badge+=' <span class="ext-badge">延長済</span>';if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';const delBtn=past?'':`<button class="t-del" onclick="delB(${b.id})">削除</button>`;return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button>${delBtn}</div>`;}).join('');
 }
 function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
 function isToday(){return curDate===new Date().toISOString().slice(0,10);}
+function isPast(){return curDate<new Date().toISOString().slice(0,10);}
 function renderGrids(bk){
 const grids=document.getElementById('grids');
 // 店舗が選ばれていなければ案内を表示
