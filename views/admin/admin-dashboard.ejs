@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>予約管理 - 全体</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px}
+.header{background:#fff;border-bottom:1px solid #e5e7eb;padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.header h1{font-size:16px;font-weight:600}
+.header input[type=date]{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.header button.day{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;font-size:13px;cursor:pointer}
+.header select{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.spacer{flex:1}
+.nav-links{display:flex;gap:6px}
+.nav-links a{font-size:13px;color:#2d7a4f;text-decoration:none;padding:6px 10px;border:1px solid #2d7a4f;border-radius:6px}
+.nav-links a:hover{background:#f0faf5}
+.logout-btn{padding:6px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;color:#666}
+.main{display:grid;grid-template-columns:320px 1fr;gap:12px;padding:12px;height:calc(100vh - 57px)}
+.panel{background:#fff;border-radius:10px;border:1px solid #e5e7eb;display:flex;flex-direction:column;overflow:hidden}
+.panel-header{padding:12px 16px;border-bottom:1px solid #e5e7eb;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.panel-header .count{font-size:12px;color:#888;font-weight:400}
+.timeline-list{flex:1;overflow-y:auto}
+.timeline-item{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #f0f0f0;gap:8px}
+.timeline-item.hl{background:#fbf6e3;border-left:3px solid #d4a017}
+.t-storename{font-size:10px;color:#fff;background:#888;border-radius:4px;padding:2px 6px;font-weight:600;white-space:nowrap}
+.timeline-item.hl .t-storename{background:#d4a017}
+.group-label{font-size:11px;color:#999;font-weight:600;padding:8px 16px 4px;background:#fafafa;border-bottom:1px solid #f0f0f0}
+.t-time{font-size:15px;font-weight:700;min-width:48px}
+.t-store{font-size:10px;color:#999;min-width:20px}
+.t-room{background:#e8f5ee;color:#2d7a4f;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:600;min-width:36px;text-align:center}
+.t-course{color:#555;font-size:13px;min-width:38px}
+.t-name{color:#333;font-size:13px;flex:1}
+.t-del{color:#c0392b;font-size:12px;cursor:pointer;border:none;background:none;padding:2px 6px;border-radius:4px}
+.t-del:hover{background:#fef2f2}
+.timeline-item.row-blocked{background:#fef2f2;border-left:3px solid #c0392b}
+.blk-warn{font-size:11px;color:#c0392b;font-weight:600;margin-top:2px}
+.t-transfer{color:#7b1fa2;font-size:12px;cursor:pointer;border:1px solid #e1c5ef;background:#faf5fd;padding:2px 7px;border-radius:4px}
+.transfer-room-btn{width:100%;text-align:left;padding:12px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:15px;cursor:pointer;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.transfer-room-btn:hover:not(:disabled){border-color:#2d7a4f;background:#f3faf6}
+.transfer-room-btn:disabled{background:#f5f5f5;color:#aaa;cursor:not-allowed}
+.transfer-room-btn .st{font-size:12px}
+.st-free{color:#2d7a4f}.st-busy{color:#c0392b}.st-blocked{color:#999}
+.empty-msg{padding:32px;text-align:center;color:#aaa;font-size:13px}
+.grid-scroll{flex:1;overflow:auto;padding:8px}
+.store-block{margin-bottom:20px}
+.store-title{font-size:14px;font-weight:600;color:#2d7a4f;padding:6px 4px;position:sticky;left:0}
+.grid{border-collapse:collapse;width:100%;min-width:300px;margin-bottom:8px}
+.grid th{position:sticky;top:0;background:#fff;z-index:10;padding:6px 10px;font-size:12px;font-weight:600;color:#555;border-bottom:2px solid #e5e7eb;text-align:center;white-space:nowrap}
+.grid th:first-child{background:#f9f9f9}
+.grid td{padding:0;border:1px solid #f0f0f0;text-align:center;height:32px;min-width:64px}
+.grid td:first-child{padding:2px 10px;font-size:11px;color:#888;background:#f9f9f9;white-space:nowrap;position:sticky;left:0}
+.cell-free{background:#fff;cursor:pointer}
+.cell-free:hover{background:#e8f5ee}
+.cell-blocked{background:repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5 4px,#e8e8e8 4px,#e8e8e8 8px);cursor:not-allowed}
+.room-memo{font-size:10px;color:#2d7a4f;font-weight:normal;margin-top:2px}
+.room-blocked{font-size:10px;color:#c0392b;font-weight:normal;margin-top:2px}
+.cell-booked{background:#fde8e8}
+.cell-cleaning{background:#eee}
+.cell-label{font-size:11px;color:#c0392b;font-weight:600}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:440px}
+.modal h2{font-size:16px;font-weight:600;margin-bottom:4px}
+.modal .msub{font-size:12px;color:#888;margin-bottom:16px}
+.form-row{display:flex;gap:12px;margin-bottom:14px}
+.form-group{flex:1}
+.form-group label{display:block;font-size:12px;color:#666;margin-bottom:5px}
+.form-group input,.form-group select{width:100%;padding:9px;border:1px solid #ddd;border-radius:7px;font-size:14px}
+.course-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.course-btn{padding:10px 4px;border:1px solid #ddd;border-radius:7px;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer}
+.course-btn.active{background:#2d7a4f;color:#fff;border-color:#2d7a4f}
+.name-toggle{display:flex;gap:14px;margin-bottom:10px}
+.name-toggle label{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer}
+.modal-actions{display:flex;gap:10px;margin-top:18px}
+.btn-primary{flex:1;padding:11px;background:#2d7a4f;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+.btn-cancel{padding:11px 20px;background:#f5f5f5;border:1px solid #ddd;border-radius:8px;font-size:14px;cursor:pointer}
+.error-msg{color:#c0392b;font-size:12px;margin-top:6px;display:none}
+.now-row td{border-top:2px solid #e3342f !important}
+.now-row td:first-child{color:#e3342f;font-weight:700}
+.half-row td{border-top:1px solid #d8d8d8}
+.ext-badge{background:#fff3e0;color:#e67e22;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600}
+.shift-badge{background:#e3f2fd;color:#1976d2;font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600}
+.t-ext{color:#e67e22;font-size:12px;cursor:pointer;border:1px solid #fce0c0;background:#fff8f0;padding:3px 7px;border-radius:4px}
+.t-shift{color:#1976d2;font-size:12px;cursor:pointer;border:1px solid #cfe5fb;background:#f5fafe;padding:3px 7px;border-radius:4px}
+.ext-btns,.shift-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.ext-btn,.shift-btn{padding:11px 4px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer}
+.ext-btn.active,.shift-btn.active{background:#2d7a4f;color:#fff;border-color:#2d7a4f}
+.warn-msg{background:#fff8e1;color:#b26a00;font-size:12px;padding:9px 12px;border-radius:8px;margin-top:12px;line-height:1.5}
+@media(max-width:768px){.main{grid-template-columns:1fr;grid-template-rows:auto 1fr}.panel.timeline{max-height:260px}}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>予約管理</h1>
+<input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
+<button class="day" onclick="setToday()">今日</button>
+<button class="day" onclick="setYesterday()">昨日</button>
+<button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#e67e22;color:#e67e22">🔔 通知（画面を触ると開始）</button>
+<select id="storeFilter" onchange="rerender()">
+<option value="">店舗を選択…</option>
+<% stores.forEach(s=>{ %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
+</select>
+<div class="spacer"></div>
+<div class="nav-links">
+<a href="/admin/stores">店舗管理</a>
+<a href="/admin/rooms">部屋管理</a>
+<a href="/admin/partners">名前管理</a>
+</div>
+<form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
+</div>
+<div class="main">
+<div class="panel timeline">
+<div class="panel-header"><span>本日の予約</span><span class="count" id="cnt">0件</span></div>
+<div class="timeline-list" id="list"><div class="empty-msg">予約はありません</div></div>
+</div>
+<div class="panel">
+<div class="panel-header"><span>空き状況</span><span class="count">空きをクリックで予約</span></div>
+<div class="grid-scroll" id="grids"></div>
+</div>
+</div>
+<div class="modal-overlay" id="mo">
+<div class="modal">
+<h2>予約追加</h2>
+<p class="msub" id="msub"></p>
+<div class="form-row">
+<div class="form-group"><label>部屋</label><select id="mRoom"></select></div>
+<div class="form-group"><label>開始時刻</label><input type="time" id="mTime"></div>
+</div>
+<div class="form-group" style="margin-bottom:14px">
+<label>コース時間</label>
+<div class="course-btns" id="cbtns"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;color:#666">手入力:</span>
+<input type="number" id="cManual" placeholder="分" min="5" step="5" style="width:74px;padding:7px;border:1px solid #ddd;border-radius:6px">
+<span style="font-size:12px;color:#666">分</span>
+</div>
+</div>
+<div class="form-group" style="margin-bottom:6px">
+<label>名前</label>
+<div class="name-toggle">
+<label><input type="radio" name="nt" value="code" checked> コード</label>
+<label><input type="radio" name="nt" value="manual"> 手入力</label>
+</div>
+<select id="mCode"></select>
+<input type="text" id="mName" placeholder="客名・メモ" style="display:none;width:100%;padding:9px;border:1px solid #ddd;border-radius:7px">
+</div>
+<div class="error-msg" id="err"></div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeM()">キャンセル</button>
+<button class="btn-primary" onclick="submitB()">予約追加</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="extMo">
+<div class="modal">
+<h2>延長</h2>
+<p class="msub" id="extSub"></p>
+<div class="form-group" style="margin-bottom:8px">
+<label style="display:block;font-size:12px;color:#666;margin-bottom:6px">延長時間</label>
+<div class="ext-btns" id="extBtns"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:12px;color:#666">手入力:</span>
+<input type="number" id="extManual" placeholder="分" min="5" step="5" style="width:74px;padding:7px;border:1px solid #ddd;border-radius:6px">
+<span style="font-size:12px;color:#666">分</span>
+</div>
+</div>
+<div class="error-msg" id="extErr"></div>
+<div class="warn-msg">延長したら、お店にも電話で延長を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeExt()">キャンセル</button>
+<button class="btn-primary" onclick="doExtend()">延長する</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="shiftMo">
+<div class="modal">
+<h2>時間をずらす</h2>
+<p class="msub" id="shiftSub"></p>
+<div class="form-group" style="margin-bottom:8px">
+<label style="display:block;font-size:12px;color:#666;margin-bottom:6px">新しい開始時刻</label>
+<input type="time" id="shiftTime" step="300" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:7px;font-size:15px">
+</div>
+<div class="error-msg" id="shiftErr"></div>
+<div class="warn-msg">時間を変更したら、お店にも電話で変更を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeShift()">キャンセル</button>
+<button class="btn-primary" onclick="doShift()">変更する</button>
+</div>
+</div>
+</div>
+<div class="modal-overlay" id="transferMo">
+<div class="modal">
+<h2>別の部屋へ振り替え</h2>
+<p class="msub" id="transferSub"></p>
+<div id="transferRooms"></div>
+<div class="error-msg" id="transferErr"></div>
+<div class="warn-msg">振り替えたら、お店にも電話で部屋の変更を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeTransfer()">閉じる</button>
+</div>
+</div>
+</div>
+<script>
+const stores=<%- JSON.stringify(stores) %>;
+const allRooms=<%- JSON.stringify(rooms) %>;
+const partners=<%- JSON.stringify(partners) %>;
+const durations=<%- JSON.stringify(durations) %>;
+let selCourse=null;
+let curDate=document.getElementById('dateInput').value;
+document.getElementById('dateInput').addEventListener('change',e=>{curDate=e.target.value;load();});
+function setToday(){curDate=new Date().toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
+function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.toISOString().slice(0,10);document.getElementById('dateInput').value=curDate;load();}
+function visibleStores(){const f=document.getElementById('storeFilter').value;return f?stores.filter(s=>s.id==f):stores;}
+function roomsOf(sid){return allRooms.filter(r=>r.store_id==sid);}
+async function load(){
+// 一覧は常に全店舗ぶん必要なので、store_idは付けず全件取得する
+const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();
+renderList(bk);renderGrids(bk);
+}
+// セレクト変更時：再取得せず保持データで描画し直す
+function rerender(){renderList(lastBk);renderGrids(lastBk);}
+let lastBk=[];
+function bookingRow(b,hl){
+const t=b.start_at.slice(11,16);
+const nm=b.partner_code||b.client_name||'-';
+let badge='';
+if(b.extended)badge+=' <span class="ext-badge">延長済</span>';
+if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';
+const blk=b.room_blocked;
+const warn=blk?`<div class="blk-warn">⚠️利用不可の部屋${b.block_reason?'：'+b.block_reason:''}</div>`:'';
+const transferBtn=blk?`<button class="t-transfer" onclick="openTransfer(${b.id})">振替</button>`:'';
+return `<div class="timeline-item${hl?' hl':''}${blk?' row-blocked':''}"><span class="t-time">${t}</span><span class="t-storename">${b.store_name||''}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}${warn}</span>${transferBtn}<button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;
+}
+function renderList(bk){
+lastBk=bk;
+document.getElementById('cnt').textContent=bk.length+'件';
+if(!bk.length){document.getElementById('list').innerHTML='<div class="empty-msg">予約はありません</div>';return;}
+const f=document.getElementById('storeFilter').value;
+const byTime=(a,b)=>a.start_at.localeCompare(b.start_at);
+if(!f){
+// 未選択時：全店舗を時刻順で表示
+document.getElementById('list').innerHTML=[...bk].sort(byTime).map(b=>bookingRow(b,false)).join('');
+return;
+}
+// 店舗選択時：選択店舗を上（ハイライト）、残りを下
+const sel=bk.filter(b=>b.store_id==f).sort(byTime);
+const rest=bk.filter(b=>b.store_id!=f).sort(byTime);
+let html='';
+if(sel.length)html+=sel.map(b=>bookingRow(b,true)).join('');
+if(rest.length){
+if(sel.length)html+='<div class="group-label">その他の店舗</div>';
+html+=rest.map(b=>bookingRow(b,false)).join('');
+}
+document.getElementById('list').innerHTML=html;
+}
+function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
+function isToday(){return curDate===new Date().toISOString().slice(0,10);}
+function renderGrids(bk){
+const grids=document.getElementById('grids');
+// 店舗が選ばれていなければ案内のみ（グリッドは出さない）
+if(!document.getElementById('storeFilter').value){
+grids.innerHTML='<div class="empty-msg" style="padding:40px 20px;text-align:center;color:#999">上の店舗を選んでください</div>';
+return;
+}
+const map={};allRooms.forEach(r=>map[r.id]=[]);
+bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes});}});
+const ns=nowSlot();const today=isToday();let firstNowId=null;
+let html='';
+visibleStores().forEach(store=>{
+const rms=roomsOf(store.id);
+if(!rms.length)return;
+html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}${r.memo?`<div class="room-memo">${r.memo}</div>`:''}${r.blocked?`<div class="room-blocked">利用不可${r.block_reason?'：'+r.block_reason:''}</div>`:''}</th>`).join('')}</tr></thead><tbody>`;
+for(let h=10;h<34;h++){for(let m=0;m<60;m+=5){
+const tot=h*60+m;const dh=h>=24?h-24:h;
+const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+const isNow=today&&ns>=tot&&ns<tot+5;
+const showLabel=(m%30===0);
+let rowId='';if(isNow&&!firstNowId){firstNowId='now_'+store.id+'_'+tot;rowId=` id="${firstNowId}"`;}
+html+=`<tr${rowId}${isNow?' class="now-row"':''}${showLabel?' class="half-row"':''}><td>${showLabel?lb:''}</td>`;
+rms.forEach(r=>{if(r.blocked){html+=`<td class="cell-blocked"></td>`;return;}const st=cellStatus(map[r.id],tot);if(st==='booked')html+=`<td class="cell-booked">${showLabel?'<span class="cell-label">×</span>':''}</td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+html+=`</tr>`;
+}}
+html+=`</tbody></table></div>`;
+});
+document.getElementById('grids').innerHTML=html||'<div class="empty-msg">部屋がありません</div>';
+if(firstNowId){const nr=document.getElementById(firstNowId);if(nr)nr.scrollIntoView({block:'center'});}
+}
+function cellStatus(bs,slot){for(const b of bs){if(slot>=b.start&&slot<b.course)return 'booked';if(slot>=b.course&&slot<b.end)return 'cleaning';}return 'free';}
+function tm(s){const[h,m]=s.split(':').map(Number);return h*60+m;}
+function openM(rid,time){
+const room=allRooms.find(r=>r.id==rid);
+const sameStore=roomsOf(room.store_id);
+document.getElementById('mRoom').innerHTML=sameStore.map(r=>`<option value="${r.id}" ${r.id==rid?'selected':''}>${r.name}</option>`).join('');
+document.getElementById('msub').textContent=room.store_name+'（清掃時間は店舗設定に従います）';
+document.getElementById('mTime').value=time;
+document.getElementById('cbtns').innerHTML=durations.map(d=>`<button class="course-btn" onclick="selC(this,${d.minutes})">${d.minutes}分</button>`).join('');
+selCourse=null;document.getElementById('cManual').value='';
+document.getElementById('mCode').innerHTML='<option value="">選択</option>'+partners.map(p=>`<option value="${p.code}">${p.code}</option>`).join('');
+document.querySelectorAll('input[name=nt]').forEach(r=>r.onchange=e=>{document.getElementById('mCode').style.display=e.target.value==='code'?'':'none';document.getElementById('mName').style.display=e.target.value==='manual'?'':'none';});
+document.querySelector('input[name=nt][value=code]').checked=true;
+document.getElementById('mCode').style.display='';document.getElementById('mName').style.display='none';
+document.getElementById('err').style.display='none';
+document.getElementById('mo').classList.add('open');
+}
+function selC(btn,min){document.querySelectorAll('.course-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');selCourse=min;document.getElementById('cManual').value='';}
+function closeM(){document.getElementById('mo').classList.remove('open');}
+async function submitB(){
+const room_id=document.getElementById('mRoom').value;
+const time=document.getElementById('mTime').value;
+const man=parseInt(document.getElementById('cManual').value);
+const nt=document.querySelector('input[name=nt]:checked').value;
+const partner_code=nt==='code'?document.getElementById('mCode').value:null;
+const client_name=nt==='manual'?document.getElementById('mName').value:null;
+let course_minutes;
+if(selCourse)course_minutes=selCourse;
+else if(!isNaN(man)&&man>0)course_minutes=man;
+else{showErr('コース時間を選んでください');return;}
+const start_at=`${curDate}T${time}`;
+const res=await fetch('/api/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({room_id,start_at,course_minutes,partner_code,client_name})});
+const d=await res.json();
+if(!res.ok){showErr(d.error);return;}
+closeM();load();
+}
+async function delB(id){if(!confirm('削除しますか？'))return;await fetch(`/api/bookings/${id}`,{method:'DELETE'});load();}function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
+document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
+
+// ===== 延長 =====
+let extId=null,extAdd=null;
+function openExt(id){extId=id;extAdd=null;const b=lastBk.find(x=>x.id===id);document.getElementById('extSub').textContent=b?`${b.store_name||''} ${b.room_name} / ${b.start_at.slice(11,16)} 開始 / 現在${b.course_minutes}分`:'';document.getElementById('extBtns').innerHTML=[10,20,30,60].map(m=>`<button class="ext-btn" onclick="selExt(this,${m})">+${m}分</button>`).join('');document.getElementById('extManual').value='';document.getElementById('extErr').style.display='none';document.getElementById('extMo').classList.add('open');}
+function selExt(btn,m){document.querySelectorAll('.ext-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');extAdd=m;document.getElementById('extManual').value='';}
+function closeExt(){document.getElementById('extMo').classList.remove('open');}
+async function doExtend(){const man=parseInt(document.getElementById('extManual').value);let add;if(extAdd)add=extAdd;else if(!isNaN(man)&&man>0)add=man;else{document.getElementById('extErr').textContent='延長時間を選んでください';document.getElementById('extErr').style.display='block';return;}const res=await fetch(`/api/bookings/${extId}/extend`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({add_minutes:add})});const d=await res.json();if(!res.ok){document.getElementById('extErr').textContent=d.error;document.getElementById('extErr').style.display='block';return;}closeExt();load();}
+document.getElementById('extMo').addEventListener('click',e=>{if(e.target===document.getElementById('extMo'))closeExt();});
+
+// ===== 時間をずらす =====
+let shiftId=null;
+function openShift(id){shiftId=id;const b=lastBk.find(x=>x.id===id);document.getElementById('shiftSub').textContent=b?`${b.store_name||''} ${b.room_name} / 現在 ${b.start_at.slice(11,16)} 開始`:'';document.getElementById('shiftTime').value=b?b.start_at.slice(11,16):'';document.getElementById('shiftErr').style.display='none';document.getElementById('shiftMo').classList.add('open');}
+function closeShift(){document.getElementById('shiftMo').classList.remove('open');}
+async function doShift(){const t=document.getElementById('shiftTime').value;if(!t){document.getElementById('shiftErr').textContent='時刻を入力してください';document.getElementById('shiftErr').style.display='block';return;}const res=await fetch(`/api/bookings/${shiftId}/shift`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_time:t})});const d=await res.json();if(!res.ok){document.getElementById('shiftErr').textContent=d.error;document.getElementById('shiftErr').style.display='block';return;}closeShift();load();}
+document.getElementById('shiftMo').addEventListener('click',e=>{if(e.target===document.getElementById('shiftMo'))closeShift();});
+
+// ===== 振り替え =====
+let transferId=null;
+function overlaps(aStart,aEnd,bStart,bEnd){return aStart<bEnd&&aEnd>bStart;}
+function openTransfer(id){
+transferId=id;
+const b=lastBk.find(x=>x.id===id);
+if(!b)return;
+document.getElementById('transferSub').textContent=`${b.store_name||''} / ${b.start_at.slice(11,16)} 開始 / ${b.course_minutes}分 / 現在「${b.room_name}」（利用不可）`;
+document.getElementById('transferErr').style.display='none';
+const startMin=tm(b.start_at.slice(11,16));
+const candidates=allRooms.filter(r=>r.store_id==b.store_id&&r.id!=b.room_id);
+const html=candidates.map(r=>{
+let status,cls,disabled='';
+if(r.blocked){status='利用不可';cls='st-blocked';disabled='disabled';}
+else{
+const end=startMin+b.course_minutes;
+const busy=lastBk.some(o=>o.room_id==r.id&&o.id!=b.id&&overlaps(startMin,end,tm(o.start_at.slice(11,16)),tm(o.start_at.slice(11,16))+o.block_minutes));
+if(busy){status='その時間は埋まっています';cls='st-busy';disabled='disabled';}
+else{status='空き';cls='st-free';}
+}
+return `<button class="transfer-room-btn" ${disabled} onclick="doTransfer(${r.id})"><span>${r.name}</span><span class="st ${cls}">${status}</span></button>`;
+}).join('');
+document.getElementById('transferRooms').innerHTML=html||'<div class="empty-msg">振り替えできる部屋がありません</div>';
+document.getElementById('transferMo').classList.add('open');
+}
+function closeTransfer(){document.getElementById('transferMo').classList.remove('open');}
+async function doTransfer(toRoomId){
+const res=await fetch(`/api/bookings/${transferId}/transfer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_room_id:toRoomId})});
+const d=await res.json();
+if(!res.ok){const e=document.getElementById('transferErr');e.textContent=d.error;e.style.display='block';return;}
+closeTransfer();load();
+}
+document.getElementById('transferMo').addEventListener('click',e=>{if(e.target===document.getElementById('transferMo'))closeTransfer();});
+
+// ===== 予約 通知システム（新規/削除/変更を音で区別・マリンバ音色）=====
+const VOL=0.85;
+let notifyOn=false;
+let userDisabled=false;
+let snapMap=null;
+let audioCtx=null;
+let titleBlink=null;
+const baseTitle=document.title;
+
+function enableNotify(playTest){
+try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
+if(audioCtx&&audioCtx.state==='suspended'){try{audioCtx.resume();}catch(e){}}
+notifyOn=true;userDisabled=false;
+const btn=document.getElementById('notifyBtn');
+btn.textContent='🔔 通知ON';btn.style.borderColor='#2d7a4f';btn.style.color='#2d7a4f';
+if(playTest)soundNew();
+}
+function disableNotify(){
+notifyOn=false;userDisabled=true;
+const btn=document.getElementById('notifyBtn');
+btn.textContent='🔔 通知OFF';btn.style.borderColor='#c0392b';btn.style.color='#c0392b';
+stopBlink();
+}
+function toggleNotify(){if(notifyOn)disableNotify();else enableNotify(true);}
+function autoEnableOnce(){if(!notifyOn&&!userDisabled)enableNotify(false);}
+document.addEventListener('click',autoEnableOnce);
+document.addEventListener('touchstart',autoEnableOnce,{passive:true});
+function tone(freq,delay,dur,mul){
+if(!audioCtx)return;
+try{
+const t=audioCtx.currentTime+delay;
+const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+o.connect(g);g.connect(audioCtx.destination);
+o.type='triangle';o.frequency.value=freq;
+const peak=Math.max(VOL*mul,0.0002);
+g.gain.setValueAtTime(0.0001,t);
+g.gain.exponentialRampToValueAtTime(peak,t+0.012);
+g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+o.start(t);o.stop(t+dur+0.02);
+}catch(e){}
+}
+function soundNew(){tone(587,0,0.45,1.0);tone(784,0.12,0.45,1.0);tone(988,0.24,0.6,1.0);}
+function soundDel(){tone(784,0,0.4,0.9);tone(587,0.12,0.5,0.9);tone(440,0.24,0.6,0.9);}
+function soundChg(){tone(660,0,0.3,0.9);}
+
+function flashBadge(color){
+const c=document.getElementById('cnt');
+c.style.transition='none';c.style.background=color;c.style.color='#fff';c.style.borderRadius='6px';c.style.padding='2px 8px';
+setTimeout(()=>{c.style.transition='all 1.2s';c.style.background='';c.style.color='';},80);
+}
+function startBlink(msg){
+stopBlink();let on=true;
+titleBlink=setInterval(()=>{document.title=on?`🔴 ${msg}`:baseTitle;on=!on;},700);
+}
+function stopBlink(){if(titleBlink){clearInterval(titleBlink);titleBlink=null;document.title=baseTitle;}}
+window.addEventListener('focus',stopBlink);
+document.addEventListener('click',()=>{if(titleBlink)stopBlink();});
+
+function snapKey(r){return `${r.start_at}|${r.course_minutes}|${r.extended}|${r.shifted}`;}
+
+async function checkNew(){
+try{
+const res=await fetch('/api/booking-ids');
+if(!res.ok)return;
+const rows=await res.json();
+const cur=new Map();rows.forEach(r=>cur.set(r.id,snapKey(r)));
+if(snapMap===null){snapMap=cur;return;}
+let added=0,removed=0,changed=0;
+cur.forEach((key,id)=>{if(!snapMap.has(id))added++;else if(snapMap.get(id)!==key)changed++;});
+snapMap.forEach((key,id)=>{if(!cur.has(id))removed++;});
+snapMap=cur;
+if(notifyOn&&(added||removed||changed)){
+if(added){soundNew();flashBadge('#2d7a4f');startBlink(`新規予約 ${added}件`);}
+else if(removed){soundDel();flashBadge('#c0392b');startBlink(`予約削除 ${removed}件`);}
+else if(changed){soundChg();flashBadge('#1976d2');startBlink(`予約変更 ${changed}件`);}
+load();
+}
+}catch(e){}
+}
+// ===== ここまで通知システム =====
+
+load();setInterval(load,30000);
+checkNew();setInterval(checkNew,30000);
+</script>
+</body>
+</html>
