@@ -67,6 +67,15 @@ router.post('/bookings', requireLogin, (req, res) => {
     return res.status(403).json({ error: '他店舗の部屋は予約できません' });
   }
 
+  // 予約者(partner)のみ：過去の時間は予約不可（5分の余裕を持たせる）。受付・管理者は過去もOK。
+  if (user.role === 'partner') {
+    const now = new Date();
+    const startDt = new Date(start_at); // "YYYY-MM-DDTHH:MM" をローカル時刻として解釈
+    if (!isNaN(startDt.getTime()) && startDt.getTime() < now.getTime() - 5 * 60 * 1000) {
+      return res.status(400).json({ error: '過去の時間は予約できません' });
+    }
+  }
+
   const course = Number(course_minutes);
   const block = course + Number(room.cleaning_minutes);
 
