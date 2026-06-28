@@ -70,6 +70,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .ext-btn,.shift-btn{padding:12px 4px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:15px;font-weight:600;cursor:pointer}
 .ext-btn.active,.shift-btn.active{background:#2d7a4f;color:#fff;border-color:#2d7a4f}
 .warn-msg{background:#fff8e1;color:#b26a00;font-size:13px;padding:10px 12px;border-radius:8px;margin-top:12px;line-height:1.5}
+.row-blocked{background:#fef2f2;border-left:4px solid #c0392b}
+.blk-warn{font-size:11px;color:#c0392b;font-weight:600;margin-top:2px}
+.t-transfer{color:#7b1fa2;font-size:13px;cursor:pointer;border:1px solid #e1c5ef;background:#faf5fd;padding:4px 8px;border-radius:4px}
+.transfer-room-btn{width:100%;text-align:left;padding:12px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:15px;cursor:pointer;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.transfer-room-btn:hover:not(:disabled){border-color:#2d7a4f;background:#f3faf6}
+.transfer-room-btn:disabled{background:#f5f5f5;color:#aaa;cursor:not-allowed}
+.transfer-room-btn .st{font-size:12px}
+.st-free{color:#2d7a4f}.st-busy{color:#c0392b}.st-blocked{color:#999}
 @media(max-width:768px){.main{grid-template-columns:1fr;grid-template-rows:auto 1fr}.panel.timeline{max-height:300px}}
 </style>
 </head>
@@ -164,6 +172,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 </div>
 </div>
+<div class="modal-overlay" id="transferMo">
+<div class="modal">
+<h2>別の部屋へ振り替え</h2>
+<p class="msub" id="transferSub" style="font-size:12px;color:#888;margin-bottom:14px"></p>
+<div id="transferRooms"></div>
+<div class="error-msg" id="transferErr"></div>
+<div class="warn-msg">振り替えたら、お店にも電話で部屋の変更を伝えてください。</div>
+<div class="modal-actions">
+<button class="btn-cancel" onclick="closeTransfer()">閉じる</button>
+</div>
+</div>
+</div>
 <script>
 const rooms=<%- JSON.stringify(rooms) %>;
 const partners=<%- JSON.stringify(partners) %>;
@@ -176,7 +196,12 @@ function setYesterday(){const d=new Date();d.setDate(d.getDate()-1);curDate=d.to
 async function load(){const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();renderList(bk);renderGrid(bk);}
 async function toggleBlock(id,cur){
 if(cur){await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:false})});location.reload();}
-else{const reason=prompt('利用不可の理由（任意・空欄でもOK）');if(reason===null)return;await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});location.reload();}
+else{
+const cnt=lastBk.filter(b=>b.room_id==id).length;
+let head='利用不可の理由（任意・空欄でもOK）';
+if(cnt>0)head=`⚠️ この部屋には本日 予約が${cnt}件あります。\n利用不可にしても予約は残ります（一覧で赤く表示され、別部屋へ振り替えできます）。\n\n`+head;
+const reason=prompt(head);if(reason===null)return;
+await fetch('/api/rooms/'+id+'/block',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({blocked:true,reason})});location.reload();}
 }
 let lastBk=[];
 function renderList(bk){
@@ -185,7 +210,7 @@ document.getElementById('cnt').textContent=bk.length+'件';
 if(!bk.length){document.getElementById('list').innerHTML='<div class="empty-msg">予約はありません</div>';return;}
 const s=[...bk].sort((a,b)=>a.start_at.localeCompare(b.start_at));
 const past=isPast();
-document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);const nm=b.partner_code||b.client_name||'-';let badge='';if(b.extended)badge+=' <span class="ext-badge">延長済</span>';if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';const delBtn=past?'':`<button class="t-del" onclick="delB(${b.id})">削除</button>`;return `<div class="timeline-item"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}</span><button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button>${delBtn}</div>`;}).join('');
+document.getElementById('list').innerHTML=s.map(b=>{const t=b.start_at.slice(11,16);const nm=b.partner_code||b.client_name||'-';let badge='';if(b.extended)badge+=' <span class="ext-badge">延長済</span>';if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';const blk=b.room_blocked;const warn=blk?`<div class="blk-warn">⚠️利用不可の部屋${b.block_reason?'：'+b.block_reason:''}</div>`:'';const delBtn=past?'':`<button class="t-del" onclick="delB(${b.id})">削除</button>`;return `<div class="timeline-item${blk?' row-blocked':''}"><span class="t-time">${t}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}${warn}</span>${blk?`<button class="t-transfer" onclick="openTransfer(${b.id})">振替</button>`:''}<button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button>${delBtn}</div>`;}).join('');
 }
 function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
 function isToday(){return curDate===new Date().toISOString().slice(0,10);}
@@ -242,6 +267,41 @@ if(!res.ok){showErr(d.error);return;}
 closeM();load();
 }
 async function delB(id){if(!confirm('削除しますか？'))return;await fetch(`/api/bookings/${id}`,{method:'DELETE'});load();}
+// ===== 振り替え =====
+let transferId=null;
+function overlaps(aStart,aEnd,bStart,bEnd){return aStart<bEnd&&aEnd>bStart;}
+function openTransfer(id){
+transferId=id;
+const b=lastBk.find(x=>x.id===id);
+if(!b){return;}
+document.getElementById('transferSub').textContent=`${b.start_at.slice(11,16)} 開始 / ${b.course_minutes}分 / 現在「${b.room_name}」（利用不可）`;
+document.getElementById('transferErr').style.display='none';
+const startMin=tm(b.start_at.slice(11,16));
+// 同店舗の他の部屋（受付は自店のみ。rooms は自店のみ）
+const candidates=rooms.filter(r=>r.id!=b.room_id);
+const html=candidates.map(r=>{
+let status,cls,disabled='';
+if(r.blocked){status='利用不可';cls='st-blocked';disabled='disabled';}
+else{
+// 清掃時間は不明なのでコース時間のぶんで簡易判定（サーバ側で最終判定）
+const end=startMin+b.course_minutes;
+const busy=lastBk.some(o=>o.room_id==r.id&&o.id!=b.id&&overlaps(startMin,end,tm(o.start_at.slice(11,16)),tm(o.start_at.slice(11,16))+o.block_minutes));
+if(busy){status='その時間は埋まっています';cls='st-busy';disabled='disabled';}
+else{status='空き';cls='st-free';}
+}
+return `<button class="transfer-room-btn" ${disabled} onclick="doTransfer(${r.id})"><span>${r.name}</span><span class="st ${cls}">${status}</span></button>`;
+}).join('');
+document.getElementById('transferRooms').innerHTML=html||'<div class="empty-msg">振り替えできる部屋がありません</div>';
+document.getElementById('transferMo').classList.add('open');
+}
+function closeTransfer(){document.getElementById('transferMo').classList.remove('open');}
+async function doTransfer(toRoomId){
+const res=await fetch(`/api/bookings/${transferId}/transfer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_room_id:toRoomId})});
+const d=await res.json();
+if(!res.ok){const e=document.getElementById('transferErr');e.textContent=d.error;e.style.display='block';return;}
+closeTransfer();load();
+}
+document.getElementById('transferMo').addEventListener('click',e=>{if(e.target===document.getElementById('transferMo'))closeTransfer();});
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
 document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
 
