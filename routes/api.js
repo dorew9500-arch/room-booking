@@ -16,9 +16,10 @@ router.get('/bookings', requireLogin, (req, res) => {
   let sql = `
     SELECT b.id, b.room_id, b.partner_id, b.client_name, b.start_at,
            b.course_minutes, b.block_minutes, b.extended, b.shifted,
-           r.name as room_name, r.store_id, p.code as partner_code
+           r.name as room_name, r.store_id, s.name as store_name, p.code as partner_code
     FROM bookings b
     JOIN rooms r ON b.room_id = r.id
+    JOIN stores s ON r.store_id = s.id
     LEFT JOIN partners p ON b.partner_id = p.id
     WHERE substr(b.start_at, 1, 10) = ?`;
   const params = [date];
