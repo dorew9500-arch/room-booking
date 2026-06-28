@@ -80,6 +80,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <input type="date" id="dateInput" value="<%= new Date().toISOString().slice(0,10) %>">
 <button class="day" onclick="setToday()">今日</button>
 <button class="day" onclick="setYesterday()">昨日</button>
+<button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#c0392b;color:#c0392b">🔔 通知OFF</button>
 <div class="spacer"></div>
 <form action="/logout" method="GET" style="margin:0"><button class="logout-btn" type="submit">ログアウト</button></form>
 </div>
@@ -242,7 +243,78 @@ closeM();load();
 async function delB(id){if(!confirm('削除しますか？'))return;await fetch(`/api/bookings/${id}`,{method:'DELETE'});load();}
 function showErr(m){const e=document.getElementById('err');e.textContent=m;e.style.display='block';}
 document.getElementById('mo').addEventListener('click',e=>{if(e.target===document.getElementById('mo'))closeM();});
-load();setInterval(load,30000);
+
+// ===== 新規予約 通知システム =====
+let notifyOn=false;            // 通知ON/OFF
+let knownIds=null;             // 既知の予約IDの集合（初回はnull）
+let audioCtx=null;             // 音声コンテキスト
+let titleBlink=null;           // タブ点滅タイマー
+const baseTitle=document.title;
+
+function toggleNotify(){
+notifyOn=!notifyOn;
+const btn=document.getElementById('notifyBtn');
+if(notifyOn){
+// 音の自動再生制限を解除するため、ユーザー操作のこのタイミングでAudioContextを作る
+try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
+btn.textContent='🔔 通知ON';btn.style.borderColor='#2d7a4f';btn.style.color='#2d7a4f';
+beep(); // テスト鳴動（ONになったのが分かる）
+}else{
+btn.textContent='🔔 通知OFF';btn.style.borderColor='#c0392b';btn.style.color='#c0392b';
+stopBlink();
+}
+}
+function beep(){
+if(!audioCtx)return;
+try{
+const o=audioCtx.createOscillator();const g=audioCtx.createGain();
+o.connect(g);g.connect(audioCtx.destination);
+o.type='sine';o.frequency.value=880;
+g.gain.setValueAtTime(0.001,audioCtx.currentTime);
+g.gain.exponentialRampToValueAtTime(0.3,audioCtx.currentTime+0.01);
+g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);
+o.start();o.stop(audioCtx.currentTime+0.36);
+// 2回鳴らす（ピコッ・ピコッ）
+setTimeout(()=>{try{const o2=audioCtx.createOscillator();const g2=audioCtx.createGain();o2.connect(g2);g2.connect(audioCtx.destination);o2.type='sine';o2.frequency.value=1100;g2.gain.setValueAtTime(0.001,audioCtx.currentTime);g2.gain.exponentialRampToValueAtTime(0.3,audioCtx.currentTime+0.01);g2.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.35);o2.start();o2.stop(audioCtx.currentTime+0.36);}catch(e){}},180);
+}catch(e){}
+}
+function flashBadge(){
+const c=document.getElementById('cnt');
+c.style.transition='none';c.style.background='#2d7a4f';c.style.color='#fff';c.style.borderRadius='6px';c.style.padding='2px 8px';
+setTimeout(()=>{c.style.transition='all 1.2s';c.style.background='';c.style.color='';},80);
+}
+function startBlink(n){
+stopBlink();
+let on=true;
+titleBlink=setInterval(()=>{document.title=on?`🔴 新規予約 ${n}件`:baseTitle;on=!on;},700);
+}
+function stopBlink(){if(titleBlink){clearInterval(titleBlink);titleBlink=null;document.title=baseTitle;}}
+// 画面を見たら点滅を止める
+window.addEventListener('focus',stopBlink);
+document.addEventListener('click',()=>{if(titleBlink)stopBlink();});
+
+async function checkNew(){
+try{
+const res=await fetch('/api/booking-ids');
+if(!res.ok)return;
+const rows=await res.json();
+const ids=rows.map(r=>r.id);
+if(knownIds===null){knownIds=new Set(ids);return;} // 初回は記録だけ（鳴らさない）
+const fresh=rows.filter(r=>!knownIds.has(r.id));
+ids.forEach(id=>knownIds.add(id));
+if(fresh.length&&notifyOn){
+beep();flashBadge();startBlink(fresh.length);
+load(); // 一覧も即更新
+}
+}catch(e){}
+}
+// ===== ここまで通知システム =====
+
+load();
+setInterval(load,30000);
+checkNew();
+setInterval(checkNew,30000);
+
 </script>
 </body>
 </html>
