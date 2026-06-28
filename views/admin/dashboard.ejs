@@ -91,7 +91,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <button class="day" onclick="setYesterday()">昨日</button>
 <button class="day" id="notifyBtn" onclick="toggleNotify()" style="border-color:#c0392b;color:#c0392b">🔔 通知OFF</button>
 <select id="storeFilter" onchange="rerender()">
-<option value="">全店舗</option>
+<option value="">店舗を選択…</option>
 <% stores.forEach(s=>{ %><option value="<%= s.id %>"><%= s.name %></option><% }) %>
 </select>
 <div class="spacer"></div>
@@ -217,7 +217,7 @@ if(!bk.length){document.getElementById('list').innerHTML='<div class="empty-msg"
 const f=document.getElementById('storeFilter').value;
 const byTime=(a,b)=>a.start_at.localeCompare(b.start_at);
 if(!f){
-// 全店舗選択時：単純に時刻順
+// 未選択時：全店舗を時刻順で表示
 document.getElementById('list').innerHTML=[...bk].sort(byTime).map(b=>bookingRow(b,false)).join('');
 return;
 }
@@ -235,6 +235,12 @@ document.getElementById('list').innerHTML=html;
 function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
 function isToday(){return curDate===new Date().toISOString().slice(0,10);}
 function renderGrids(bk){
+const grids=document.getElementById('grids');
+// 店舗が選ばれていなければ案内のみ（グリッドは出さない）
+if(!document.getElementById('storeFilter').value){
+grids.innerHTML='<div class="empty-msg" style="padding:40px 20px;text-align:center;color:#999">上の店舗を選んでください</div>';
+return;
+}
 const map={};allRooms.forEach(r=>map[r.id]=[]);
 bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes});}});
 const ns=nowSlot();const today=isToday();let firstNowId=null;
