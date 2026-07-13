@@ -90,6 +90,18 @@ async function initDB() {
       shifted INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now', 'localtime'))
     );
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      partner_id INTEGER NOT NULL,
+      store_id INTEGER NOT NULL,
+      chat_date TEXT NOT NULL,
+      sender_role TEXT NOT NULL,
+      sender_label TEXT DEFAULT '',
+      body TEXT NOT NULL,
+      read_by_partner INTEGER DEFAULT 0,
+      read_by_store INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    );
   `);
 
   // 自動マイグレーション：既存DBに無い列を安全に追加（データを消さずに構造を更新）
