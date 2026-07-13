@@ -240,9 +240,11 @@ async function load(){
 // 一覧は常に全店舗ぶん必要なので、store_idは付けず全件取得する
 const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();
 renderList(bk);renderGrids(bk);
+syncChatStore();
 }
 // セレクト変更時：再取得せず保持データで描画し直す
-function rerender(){renderList(lastBk);renderGrids(lastBk);}
+function rerender(){renderList(lastBk);renderGrids(lastBk);syncChatStore();}
+function syncChatStore(){if(window.ChatWidget){const f=document.getElementById('storeFilter').value;ChatWidget.setStore(f||null);}}
 let lastBk=[];
 function bookingRow(b,hl){
 const t=b.start_at.slice(11,16);
@@ -646,5 +648,7 @@ load();
 load();setInterval(load,30000);
 checkNew();setInterval(checkNew,30000);
 </script>
+<%- include('../partials/chat') %>
+<script>ChatWidget.init({ role:'admin', dateFn:()=>curDate });</script>
 </body>
 </html>

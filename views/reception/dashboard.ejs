@@ -413,5 +413,7 @@ setInterval(checkNew,30000);
 
 
 </script>
+<%- include('../partials/chat') %>
+<script>ChatWidget.init({ role:'reception', dateFn:()=>curDate });</script>
 </body>
 </html>
