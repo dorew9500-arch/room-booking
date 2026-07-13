@@ -1,0 +1,226 @@
+<!-- ===== 共通チャットウィジェット =====
+     使い方: 各画面の </body> 直前で include し、読み込み後に ChatWidget.init({...}) を呼ぶ。
+     role:     'partner' | 'reception' | 'admin'
+     予約者は「今選んでいる店舗」との1本、店舗側は「選んだ予約者」との1本。 -->
+<style>
+.chat-fab{position:fixed;right:20px;bottom:20px;z-index:200;width:56px;height:56px;border-radius:50%;background:#2d7a4f;color:#fff;border:none;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;font-size:24px;display:flex;align-items:center;justify-content:center}
+.chat-fab:hover{background:#256a43}
+.chat-fab .fab-badge{position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#e3342f;color:#fff;font-size:12px;font-weight:700;display:none;align-items:center;justify-content:center;line-height:22px}
+.chat-fab .fab-badge.show{display:flex}
+.chat-panel{position:fixed;right:20px;bottom:88px;z-index:201;width:340px;max-width:calc(100vw - 40px);height:460px;max-height:calc(100vh - 120px);background:#fff;border:1px solid #ddd;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.2);display:none;flex-direction:column;overflow:hidden}
+.chat-panel.open{display:flex}
+.chat-head{padding:12px 14px;background:#2d7a4f;color:#fff;display:flex;align-items:center;gap:8px}
+.chat-head .ttl{font-weight:600;font-size:14px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-head .x{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1}
+.chat-sel{padding:8px 10px;border-bottom:1px solid #eee;display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#f7f9f8}
+.chat-sel select{flex:1;min-width:120px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.chat-sel .sel-badge{background:#e3342f;color:#fff;border-radius:9px;font-size:11px;font-weight:700;padding:1px 6px}
+.chat-body{flex:1;overflow-y:auto;padding:12px;background:#f6f8f7;display:flex;flex-direction:column;gap:8px}
+.chat-empty{color:#aaa;font-size:13px;text-align:center;margin:auto}
+.msg{max-width:78%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word;position:relative}
+.msg .who{font-size:10px;opacity:.7;margin-bottom:2px}
+.msg .at{font-size:10px;opacity:.55;margin-top:3px;text-align:right}
+.msg.them{align-self:flex-start;background:#fff;border:1px solid #e5e7eb;border-bottom-left-radius:4px}
+.msg.me{align-self:flex-end;background:#d4f4dd;border-bottom-right-radius:4px}
+.chat-input{display:flex;gap:6px;padding:10px;border-top:1px solid #eee;background:#fff}
+.chat-input textarea{flex:1;resize:none;border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;height:38px;max-height:90px}
+.chat-input button{background:#2d7a4f;color:#fff;border:none;border-radius:8px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer}
+.chat-input button:disabled{background:#bbb;cursor:not-allowed}
+.chat-note{font-size:11px;color:#999;padding:0 12px 8px;background:#f6f8f7}
+@media(max-width:768px){.chat-panel{right:10px;left:10px;width:auto;bottom:78px;height:70vh}.chat-fab{right:14px;bottom:14px}}
+</style>
+
+<button class="chat-fab" id="chatFab" onclick="ChatWidget.toggle()" title="チャット">💬<span class="fab-badge" id="chatFabBadge">0</span></button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-head">
+    <span class="ttl" id="chatTtl">チャット</span>
+    <button class="x" onclick="ChatWidget.close()">×</button>
+  </div>
+  <div class="chat-sel" id="chatSel" style="display:none">
+    <span style="font-size:12px;color:#666" id="chatSelLabel">相手:</span>
+    <select id="chatPartnerSel" onchange="ChatWidget.onPartnerChange()"></select>
+  </div>
+  <div class="chat-body" id="chatBody"><div class="chat-empty">読み込み中…</div></div>
+  <div class="chat-note" id="chatNote"></div>
+  <div class="chat-input">
+    <textarea id="chatInput" placeholder="メッセージを入力…" maxlength="500" onkeydown="ChatWidget.onKey(event)"></textarea>
+    <button id="chatSend" onclick="ChatWidget.send()">送信</button>
+  </div>
+</div>
+
+<script>
+const ChatWidget = (function(){
+  let cfg = { role:null };           // {role}
+  let storeId = null;                // partner: 現在の店舗 / admin: 選択店舗
+  let partnerId = null;              // reception/admin: 選択中の予約者
+  let dateFn = () => new Date().toISOString().slice(0,10);
+  let open = false;
+  let pollTimer = null;
+  let lastMaxId = 0;                 // 通知音の重複防止
+  let audioCtx = null;
+
+  function beep(){
+    try{
+      if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type='sine'; o.frequency.value=880;
+      g.gain.setValueAtTime(0.0001,audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.5,audioCtx.currentTime+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+0.35);
+      o.start(); o.stop(audioCtx.currentTime+0.36);
+    }catch(e){}
+  }
+
+  // スレッド当事者が確定しているか（partner:店舗必須 / store側:予約者必須）
+  function ready(){
+    if(cfg.role==='partner') return !!storeId;
+    return !!partnerId && !!storeId;
+  }
+  function q(){
+    const d=dateFn();
+    if(cfg.role==='partner') return `store_id=${storeId}&date=${d}`;
+    if(cfg.role==='reception') return `partner_id=${partnerId}&date=${d}`;
+    return `store_id=${storeId}&partner_id=${partnerId}&date=${d}`; // admin
+  }
+
+  async function loadMessages(silent){
+    if(!ready()){ document.getElementById('chatBody').innerHTML='<div class="chat-empty">'+(cfg.role==='partner'?'店舗を選ぶとチャットできます':'相手の予約者を選んでください')+'</div>'; return; }
+    try{
+      const res=await fetch(`/api/chat/messages?${q()}`);
+      if(!res.ok) return;
+      const msgs=await res.json();
+      renderMessages(msgs);
+    }catch(e){}
+  }
+
+  function renderMessages(msgs){
+    const body=document.getElementById('chatBody');
+    if(!msgs.length){ body.innerHTML='<div class="chat-empty">まだメッセージはありません。<br>「17:35で入れますか？」など送ってみましょう。</div>'; return; }
+    const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+    body.innerHTML = msgs.map(m=>{
+      const t=(m.at||'').slice(11,16);
+      return `<div class="msg ${m.mine?'me':'them'}">${m.mine?'':`<div class="who">${esc(m.sender_label)}</div>`}${esc(m.body)}<div class="at">${t}</div></div>`;
+    }).join('');
+    if(atBottom || open) body.scrollTop=body.scrollHeight;
+    lastMaxId = Math.max(lastMaxId, ...msgs.map(m=>m.id));
+  }
+
+  function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+  // 未読ポーリング（開いていなくても回す）→ バッジ＆通知音
+  async function pollUnread(){
+    try{
+      const res=await fetch(`/api/chat/unread?date=${dateFn()}`);
+      if(!res.ok) return;
+      const d=await res.json();
+      const badge=document.getElementById('chatFabBadge');
+      if(d.total>0){ badge.textContent=d.total; badge.classList.add('show'); }
+      else badge.classList.remove('show');
+      // 店舗側は予約者selの各人にも件数バッジを反映
+      if(cfg.role!=='partner') markPartnerBadges(d.by||[]);
+      // 新着があれば通知音（前回より未読が増えたとき）
+      if(d.total > (pollUnread._prev||0)) beep();
+      pollUnread._prev = d.total;
+      // 開いている & 相手確定なら本文も更新
+      if(open && ready()) loadMessages(true);
+    }catch(e){}
+  }
+
+  function markPartnerBadges(by){
+    const sel=document.getElementById('chatPartnerSel');
+    if(!sel) return;
+    const cntMap={};
+    by.forEach(x=>{
+      const key = cfg.role==='reception' ? x.partner_id : (String(x.store_id)===String(storeId)? x.partner_id : null);
+      if(key!=null) cntMap[key]=(cntMap[key]||0)+x.cnt;
+    });
+    [...sel.options].forEach(op=>{
+      const base=op.dataset.base||op.textContent;
+      op.dataset.base=base;
+      const c=cntMap[op.value];
+      op.textContent = c? `${base}（${c}）` : base;
+    });
+  }
+
+  async function loadPartnerList(){
+    if(cfg.role==='partner') return;
+    const sid = cfg.role==='reception' ? '' : `?store_id=${storeId}`;
+    if(cfg.role==='admin' && !storeId){ document.getElementById('chatPartnerSel').innerHTML='<option value="">店舗未選択</option>'; return; }
+    try{
+      const res=await fetch(`/api/chat/partners${cfg.role==='reception'?`?date=${dateFn()}`:`${sid}&date=${dateFn()}`}`);
+      const list=await res.json();
+      const sel=document.getElementById('chatPartnerSel');
+      if(!list.length){ sel.innerHTML='<option value="">対象の予約者がいません</option>'; partnerId=null; return; }
+      sel.innerHTML=list.map(p=>`<option value="${p.id}">${esc(p.code)}${p.name?' '+esc(p.name):''}</option>`).join('');
+      partnerId = Number(sel.value);
+    }catch(e){}
+  }
+
+  return {
+    init(options){
+      cfg.role = options.role;
+      if(options.dateFn) dateFn = options.dateFn;
+      // 店舗側は相手選択UIを出す
+      if(cfg.role!=='partner') document.getElementById('chatSel').style.display='flex';
+      // 予約者は店舗連動、adminは店舗連動、receptionは自店固定
+      document.getElementById('chatNote').textContent =
+        cfg.role==='partner' ? '※この店舗とのやり取りです'
+        : cfg.role==='reception' ? '※自店に来ている予約者とやり取りできます'
+        : '※選んだ店舗×予約者のやり取りです';
+      // 3秒ごとに未読ポーリング
+      pollUnread(); pollTimer=setInterval(pollUnread, 3000);
+    },
+    // 予約者画面から「店舗が変わった」ときに呼ぶ
+    setStore(id){
+      storeId = id? Number(id) : null;
+      updateTitle();
+      if(cfg.role==='admin'){ loadPartnerList().then(()=>{ if(open) loadMessages(); }); }
+      if(open) loadMessages();
+    },
+    onPartnerChange(){
+      partnerId = Number(document.getElementById('chatPartnerSel').value)||null;
+      updateTitle();
+      if(open) loadMessages();
+    },
+    toggle(){ open?this.close():this.openPanel(); },
+    openPanel(){
+      open=true;
+      document.getElementById('chatPanel').classList.add('open');
+      if(cfg.role!=='partner') loadPartnerList().then(()=>loadMessages());
+      else loadMessages();
+      updateTitle();
+    },
+    close(){ open=false; document.getElementById('chatPanel').classList.remove('open'); },
+    onKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); this.send(); } },
+    async send(){
+      const ta=document.getElementById('chatInput');
+      const body=ta.value.trim();
+      if(!body) return;
+      if(!ready()){ alert(cfg.role==='partner'?'先に店舗を選んでください':'相手の予約者を選んでください'); return; }
+      const btn=document.getElementById('chatSend'); btn.disabled=true;
+      try{
+        const payload={ body, date:dateFn() };
+        if(cfg.role==='partner') payload.store_id=storeId;
+        else if(cfg.role==='reception') payload.partner_id=partnerId;
+        else { payload.store_id=storeId; payload.partner_id=partnerId; }
+        const res=await fetch('/api/chat/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const d=await res.json();
+        if(res.ok){ ta.value=''; loadMessages(); }
+        else alert(d.error||'送信できませんでした');
+      }catch(e){ alert('通信エラー'); }
+      finally{ btn.disabled=false; ta.focus(); }
+    }
+  };
+
+  function updateTitle(){
+    const t=document.getElementById('chatTtl');
+    if(cfg.role==='partner') t.textContent = storeId? 'この店舗とチャット' : 'チャット（店舗を選択）';
+    else{
+      const sel=document.getElementById('chatPartnerSel');
+      const name=sel && sel.selectedIndex>=0 ? (sel.options[sel.selectedIndex].dataset.base||sel.options[sel.selectedIndex].textContent) : '';
+      t.textContent = name? `${name} とチャット` : 'チャット';
+    }
+  }
+})();
+</script>
