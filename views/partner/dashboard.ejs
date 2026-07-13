@@ -254,6 +254,7 @@ function roomsOf(sid){return allRooms.filter(r=>r.store_id==sid);}
 async function load(){
 const res=await fetch(`/api/bookings?date=${curDate}`);const bk=await res.json();
 renderList(bk);renderGrids(bk);
+if(window.ChatWidget)ChatWidget.setStore(selectedStore);
 }
 let lastBk=[];
 function renderList(bk){
@@ -382,5 +383,7 @@ document.getElementById('transferMo').addEventListener('click',e=>{if(e.target==
 document.getElementById('shiftMo').addEventListener('click',e=>{if(e.target===document.getElementById('shiftMo'))closeShift();});
 renderNav();load();setInterval(load,30000);
 </script>
+<%- include('../partials/chat') %>
+<script>ChatWidget.init({ role:'partner', dateFn:()=>curDate });</script>
 </body>
 </html>
