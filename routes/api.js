@@ -81,14 +81,18 @@ router.post('/bookings', requireLogin, (req, res) => {
   const course = Number(course_minutes);
   const block = course + Number(room.cleaning_minutes);
 
-  const startMin = toMin(start_at.slice(11, 16));
-  const endMin = startMin + block;
-  const existing = query("SELECT * FROM bookings WHERE room_id = ? AND substr(start_at,1,10) = ?", [room_id, start_at.slice(0,10)]);
-  for (const b of existing) {
-    const bStart = toMin(b.start_at.slice(11, 16));
-    const bEnd = bStart + Number(b.block_minutes);
-    if (startMin < bEnd && endMin > bStart) {
-      return res.status(409).json({ error: 'この時間帯はすでに予約が入っています' });
+  // 未振り分け部屋（is_holding）は「部屋も時間も仮」の待機列なので、重なり判定はしない。
+  // 同じ待機列に複数の予約が同時刻で並んでも良い（あとでスタッフが各部屋へ振り分ける）。
+  if (!room.is_holding) {
+    const startMin = toMin(start_at.slice(11, 16));
+    const endMin = startMin + block;
+    const existing = query("SELECT * FROM bookings WHERE room_id = ? AND substr(start_at,1,10) = ?", [room_id, start_at.slice(0,10)]);
+    for (const b of existing) {
+      const bStart = toMin(b.start_at.slice(11, 16));
+      const bEnd = bStart + Number(b.block_minutes);
+      if (startMin < bEnd && endMin > bStart) {
+        return res.status(409).json({ error: 'この時間帯はすでに予約が入っています' });
+      }
     }
   }
 
@@ -214,16 +218,29 @@ router.post('/bookings/:id/transfer', requireLogin, (req, res) => {
   const newEnd = startMin + newBlock;
   const datePart = b.start_at.slice(0, 10);
   const others = query("SELECT * FROM bookings WHERE room_id = ? AND substr(start_at,1,10) = ?", [toRoomId, datePart]);
+  const conflicts = [];
   for (const o of others) {
     const oStart = toMin(o.start_at.slice(11, 16));
     const oEnd = oStart + Number(o.block_minutes);
-    if (startMin < oEnd && newEnd > oStart) {
-      return res.status(409).json({ error: '振り替え先のその時間帯は埋まっています' });
-    }
+    if (startMin < oEnd && newEnd > oStart) conflicts.push(o);
+  }
+  // 重なりがある場合：force指定が無ければ「重なっている」ことを伝えて確認を促す。
+  // forceが来たら（＝スタッフが承知の上で）そのまま移動する。利用不可(blocked)は上で既に弾いている。
+  const force = req.body.force === true || req.body.force === 'true';
+  if (conflicts.length && !force) {
+    const first = conflicts[0];
+    const label = `${first.start_at.slice(11, 16)}〜（${first.course_minutes}分）`;
+    return res.status(409).json({
+      error: '振り替え先のその時間帯は埋まっています',
+      conflict: true,
+      conflict_count: conflicts.length,
+      conflict_label: label,
+      to_room_name: toRoom.name
+    });
   }
 
   run('UPDATE bookings SET room_id = ?, block_minutes = ? WHERE id = ?', [toRoomId, newBlock, b.id]);
-  res.json({ message: `${toRoom.name} に振り替えました` });
+  res.json({ message: `${toRoom.name} に振り替えました`, forced: conflicts.length > 0 });
 });
 
 router.get('/durations', requireLogin, (req, res) => {
