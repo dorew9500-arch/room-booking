@@ -106,6 +106,7 @@ async function initDB() {
   ensureColumn('rooms', 'memo', "TEXT DEFAULT ''");
   ensureColumn('rooms', 'blocked', 'INTEGER DEFAULT 0');
   ensureColumn('rooms', 'block_reason', "TEXT DEFAULT ''");
+  ensureColumn('rooms', 'is_holding', 'INTEGER DEFAULT 0');
   ensureColumn('admins', 'is_master', 'INTEGER DEFAULT 0');
   ensureColumn('bookings', 'extended', 'INTEGER DEFAULT 0');
   ensureColumn('bookings', 'shifted', 'INTEGER DEFAULT 0');
@@ -160,6 +161,23 @@ async function initDB() {
     _db.run("INSERT INTO rooms (store_id, name, sort_order) VALUES (?,?,?)", [1, '603', 3]);
     console.log('部屋初期データ投入完了');
   }
+
+  // 各店舗に「未振り分け」部屋を1つずつ用意する（無ければ作成）。
+  // これは実体の部屋レコードだが is_holding=1 の目印を持ち、常に一番左（sort_order=0）に置く。
+  // 予約は一旦ここに入れておき、スタッフが本来の部屋へ振り分ける運用に使う。
+  try {
+    const allStores = query('SELECT id FROM stores');
+    allStores.forEach(s => {
+      const holding = queryOne('SELECT id FROM rooms WHERE store_id = ? AND is_holding = 1', [s.id]);
+      if (!holding) {
+        _db.run(
+          "INSERT INTO rooms (store_id, name, sort_order, is_holding) VALUES (?,?,?,1)",
+          [s.id, '未振り分け', 0]
+        );
+        console.log(`未振り分け部屋を作成: 店舗ID ${s.id}`);
+      }
+    });
+  } catch (e) { console.log('未振り分け部屋マイグレーション警告:', e.message); }
 
   saveDB();
   console.log('DB初期化完了');
