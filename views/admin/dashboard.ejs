@@ -88,6 +88,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .ext-btn,.shift-btn{padding:11px 4px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer}
 .ext-btn.active,.shift-btn.active{background:#2d7a4f;color:#fff;border-color:#2d7a4f}
 .warn-msg{background:#fff8e1;color:#b26a00;font-size:12px;padding:9px 12px;border-radius:8px;margin-top:12px;line-height:1.5}
+/* ===== 未振り分け・ドラッグ振り分け ===== */
+.hold-badge{background:#e67e22;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:2px 9px;margin-left:6px;display:none}
+.hold-badge.show{display:inline-block}
+.grid th.hold-col{background:#fff4e8;color:#b8621b;border-bottom-color:#e6a86b}
+.grid td.hold-cell{background:#fffaf4;cursor:pointer}
+.grid td.hold-cell:hover{background:#ffe7d1}
+/* 予約バー（ドラッグ対象）。グリッドのセルに重ねて表示する */
+.bk-bar{position:absolute;left:2px;right:2px;border-radius:5px;font-size:11px;font-weight:600;padding:3px 5px;overflow:hidden;cursor:grab;z-index:5;border:1px solid rgba(0,0,0,.08);line-height:1.3;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.bk-bar:active{cursor:grabbing}
+.bk-bar.dragging{opacity:.4}
+.bk-bar.in-room{background:#e8f5ee;color:#1f6b41}
+.bk-bar.in-hold{background:#ffe8cc;color:#a85410;border-color:#f0c088}
+.bk-bar .bar-sub{font-size:10px;font-weight:400;opacity:.85}
+.bk-bar .bar-badge{font-size:9px;padding:0 3px;border-radius:3px}
+/* ドラッグ中、ドロップ先の列頭をハイライト */
+.grid th.drop-ok{background:#e8f5ee !important;color:#1f6b41 !important;box-shadow:inset 0 -3px 0 #2d7a4f}
+.grid th.drop-busy{background:#fdecea !important;color:#c0392b !important;box-shadow:inset 0 -3px 0 #c0392b}
+.grid th.drop-blocked{background:#f0f0f0 !important;color:#999 !important}
+/* 部屋列をドロップ受付にするための相対配置 */
+.grid td.roomcol{position:relative}
+.grid td.dragover-col{background:#eafaf0}
+.hint-drag{font-size:12px;color:#888}
 @media(max-width:768px){.main{grid-template-columns:1fr;grid-template-rows:auto 1fr}.panel.timeline{max-height:260px}}
 </style>
 </head>
@@ -116,7 +138,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 <div class="timeline-list" id="list"><div class="empty-msg">予約はありません</div></div>
 </div>
 <div class="panel">
-<div class="panel-header"><span>空き状況</span><span class="count">空きをクリックで予約</span></div>
+<div class="panel-header"><span>空き状況<span class="hold-badge" id="holdBadge"></span></span><span class="count hint-drag">空きをクリックで予約／予約バーを部屋へドラッグで振り分け</span></div>
 <div class="grid-scroll" id="grids"></div>
 </div>
 </div>
@@ -229,9 +251,13 @@ let badge='';
 if(b.extended)badge+=' <span class="ext-badge">延長済</span>';
 if(b.shifted)badge+=' <span class="shift-badge">時間変更</span>';
 const blk=b.room_blocked;
+const roomObj=allRooms.find(r=>r.id==b.room_id);
+const isHold=roomObj&&roomObj.is_holding;
 const warn=blk?`<div class="blk-warn">⚠️利用不可の部屋${b.block_reason?'：'+b.block_reason:''}</div>`:'';
-const transferBtn=blk?`<button class="t-transfer" onclick="openTransfer(${b.id})">振替</button>`:'';
-return `<div class="timeline-item${hl?' hl':''}${blk?' row-blocked':''}"><span class="t-time">${t}</span><span class="t-storename">${b.store_name||''}</span><span class="t-room">${b.room_name}</span><span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}${warn}</span>${transferBtn}<button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;
+// 未振り分け or 利用不可の予約に「振替」ボタンを出す（利用不可は従来通り、未振り分けは新規）
+const transferBtn=(blk||isHold)?`<button class="t-transfer" onclick="openTransfer(${b.id})">振替</button>`:'';
+const roomTag=isHold?`<span class="t-room" style="background:#ffe8cc;color:#a85410">未振り分け</span>`:`<span class="t-room">${b.room_name}</span>`;
+return `<div class="timeline-item${hl?' hl':''}${blk?' row-blocked':''}"><span class="t-time">${t}</span><span class="t-storename">${b.store_name||''}</span>${roomTag}<span class="t-course">${b.course_minutes}分${badge}</span><span class="t-name">${nm}${warn}</span>${transferBtn}<button class="t-shift" onclick="openShift(${b.id})">時間</button><button class="t-ext" onclick="openExt(${b.id})">延長</button><button class="t-del" onclick="delB(${b.id})">削除</button></div>`;
 }
 function renderList(bk){
 lastBk=bk;
@@ -257,6 +283,8 @@ document.getElementById('list').innerHTML=html;
 }
 function nowSlot(){const n=new Date();let h=n.getHours();if(h<10)h+=24;return h*60+n.getMinutes();}
 function isToday(){return curDate===new Date().toISOString().slice(0,10);}
+const SLOT_H=32; // 1セル（5分）の高さ(px)。CSSの .grid td height と合わせる
+const SLOT_MIN=5;
 function renderGrids(bk){
 const grids=document.getElementById('grids');
 // 店舗が選ばれていなければ案内のみ（グリッドは出さない）
@@ -264,36 +292,117 @@ if(!document.getElementById('storeFilter').value){
 grids.innerHTML='<div class="empty-msg" style="padding:40px 20px;text-align:center;color:#999">上の店舗を選んでください</div>';
 return;
 }
+// 部屋ごとに、その部屋の予約(埋まり)を集める（未振り分け部屋は塗らない＝待機列なので）
 const map={};allRooms.forEach(r=>map[r.id]=[]);
-bk.forEach(b=>{if(map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes});}});
+bk.forEach(b=>{const r=allRooms.find(x=>x.id==b.room_id);if(r&&!r.is_holding&&map[b.room_id]){const st=tm(b.start_at.slice(11,16));map[b.room_id].push({start:st,end:st+b.block_minutes,course:st+b.course_minutes});}});
 const ns=nowSlot();const today=isToday();let firstNowId=null;
 let html='';
 visibleStores().forEach(store=>{
-const rms=roomsOf(store.id);
+// 未振り分け部屋を必ず先頭（左端）に、その後に通常部屋を sort_order 順で
+const rmsAll=roomsOf(store.id);
+const hold=rmsAll.filter(r=>r.is_holding);
+const normal=rmsAll.filter(r=>!r.is_holding);
+const rms=[...hold,...normal];
 if(!rms.length)return;
-html+=`<div class="store-block"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>`<th>${r.name}${r.memo?`<div class="room-memo">${r.memo}</div>`:''}${r.blocked?`<div class="room-blocked">利用不可${r.block_reason?'：'+r.block_reason:''}</div>`:''}</th>`).join('')}</tr></thead><tbody>`;
-for(let h=10;h<34;h++){for(let m=0;m<60;m+=5){
+html+=`<div class="store-block" data-store="${store.id}"><div class="store-title">${store.name}</div><table class="grid"><thead><tr><th>時間</th>${rms.map(r=>{
+if(r.is_holding)return `<th class="hold-col" data-room="${r.id}" data-store="${store.id}">未振り分け</th>`;
+return `<th data-room="${r.id}" data-store="${store.id}">${r.name}${r.memo?`<div class="room-memo">${r.memo}</div>`:''}${r.blocked?`<div class="room-blocked">利用不可${r.block_reason?'：'+r.block_reason:''}</div>`:''}</th>`;
+}).join('')}</tr></thead><tbody>`;
+for(let h=10;h<34;h++){for(let m=0;m<60;m+=SLOT_MIN){
 const tot=h*60+m;const dh=h>=24?h-24:h;
 const lb=`${String(dh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-const isNow=today&&ns>=tot&&ns<tot+5;
+const isNow=today&&ns>=tot&&ns<tot+SLOT_MIN;
 const showLabel=(m%30===0);
 let rowId='';if(isNow&&!firstNowId){firstNowId='now_'+store.id+'_'+tot;rowId=` id="${firstNowId}"`;}
 html+=`<tr${rowId}${isNow?' class="now-row"':''}${showLabel?' class="half-row"':''}><td>${showLabel?lb:''}</td>`;
-rms.forEach(r=>{if(r.blocked){html+=`<td class="cell-blocked"></td>`;return;}const st=cellStatus(map[r.id],tot);if(st==='booked')html+=`<td class="cell-booked">${showLabel?'<span class="cell-label">×</span>':''}</td>`;else if(st==='cleaning')html+=`<td class="cell-cleaning"></td>`;else html+=`<td class="cell-free" onclick="openM('${r.id}','${lb}')"></td>`;});
+rms.forEach(r=>{
+if(r.is_holding){
+// 未振り分け列：空きセルとして常にクリック可（未振り分けで予約追加）。バーは後で重ねる
+html+=`<td class="hold-cell roomcol" data-room="${r.id}" data-slot="${tot}" onclick="openM('${r.id}','${lb}')"></td>`;
+return;
+}
+if(r.blocked){html+=`<td class="cell-blocked roomcol" data-room="${r.id}" data-slot="${tot}"></td>`;return;}
+const st=cellStatus(map[r.id],tot);
+if(st==='booked')html+=`<td class="cell-booked roomcol" data-room="${r.id}" data-slot="${tot}">${showLabel?'<span class="cell-label">×</span>':''}</td>`;
+else if(st==='cleaning')html+=`<td class="cell-cleaning roomcol" data-room="${r.id}" data-slot="${tot}"></td>`;
+else html+=`<td class="cell-free roomcol" data-room="${r.id}" data-slot="${tot}" onclick="openM('${r.id}','${lb}')"></td>`;
+});
 html+=`</tr>`;
 }}
 html+=`</tbody></table></div>`;
 });
-document.getElementById('grids').innerHTML=html||'<div class="empty-msg">部屋がありません</div>';
+grids.innerHTML=html||'<div class="empty-msg">部屋がありません</div>';
+// セル描画後、予約バーを各部屋列に絶対配置で重ねる
+placeBars(bk);
+setupBarDrag();
+updateHoldBadge(bk);
 if(firstNowId){const nr=document.getElementById(firstNowId);if(nr)nr.scrollIntoView({block:'center'});}
+}
+
+// グリッド最上段(10:00)からの分数 → 上端px。5分=SLOT_H px。
+function minToTop(startMin){return ((startMin-600)/SLOT_MIN)*SLOT_H;}
+// 予約を、その部屋列の該当セル上にバーとして重ねる
+function placeBars(bk){
+// 描画対象は「表示中の店舗」の予約のみ
+const vis=new Set(visibleStores().map(s=>String(s.id)));
+// 未振り分け列は同時刻多重があり得る。同じ(部屋,スロット)に何本目かを数えて横オフセットに使う
+const holdSeen={};
+bk.forEach(b=>{
+if(!vis.has(String(b.store_id)))return;
+const room=allRooms.find(r=>r.id==b.room_id);if(!room)return;
+// バーを置く基準セル（その部屋列の開始スロットのtd）を探す
+const startMin=tm(b.start_at.slice(11,16));
+// 基準スロットは5分丸め
+const slot=Math.round(startMin/SLOT_MIN)*SLOT_MIN;
+const td=document.querySelector(`.roomcol[data-room="${b.room_id}"][data-slot="${slot}"]`);
+if(!td)return;
+// バーは「開始セル1個ぶん」に収める取っ手。長さは既存の塗り(cell-booked/cleaning)で表現するので、
+// 下のセルを覆わずクリック・ドロップを妨げない。コース分数に応じて2セル分まで許容し名前を見せる。
+const spanCells=Math.min(Math.max(Math.round(b.course_minutes/SLOT_MIN),1),2);
+const barH=spanCells*SLOT_H-4;
+const nm=b.partner_code||b.client_name||'-';
+let badge='';
+if(b.extended)badge+=' <span class="bar-badge ext-badge">延長</span>';
+if(b.shifted)badge+=' <span class="bar-badge shift-badge">時変</span>';
+const cls=room.is_holding?'in-hold':'in-room';
+const bar=document.createElement('div');
+bar.className=`bk-bar ${cls}`;
+bar.style.top='1px';
+bar.style.height=barH+'px';
+// 未振り分けは同スロット多重があるので、2本目以降は少し下・右にずらして重なりを見せる
+if(room.is_holding){
+const key=`${b.room_id}_${slot}`;
+const n=holdSeen[key]=(holdSeen[key]||0)+1;
+if(n>1){bar.style.top=(1+(n-1)*10)+'px';bar.style.left=(2+(n-1)*6)+'px';bar.style.zIndex=5+n;}
+}
+bar.draggable=true;
+bar.dataset.bid=b.id;
+bar.dataset.store=b.store_id;
+bar.title=`${b.start_at.slice(11,16)} ${b.course_minutes}分 / ${nm}（ドラッグで部屋へ振り分け）`;
+bar.innerHTML=`${b.start_at.slice(11,16)} ${b.course_minutes}分${badge}<div class="bar-sub">${nm}</div>`;
+td.appendChild(bar);
+});
+}
+
+function updateHoldBadge(bk){
+const badge=document.getElementById('holdBadge');if(!badge)return;
+const vis=new Set(visibleStores().map(s=>String(s.id)));
+const holdRoomIds=new Set(allRooms.filter(r=>r.is_holding).map(r=>String(r.id)));
+const cnt=bk.filter(b=>vis.has(String(b.store_id))&&holdRoomIds.has(String(b.room_id))).length;
+if(cnt>0){badge.textContent=`未振り分け ${cnt}件`;badge.classList.add('show');}
+else badge.classList.remove('show');
 }
 function cellStatus(bs,slot){for(const b of bs){if(slot>=b.start&&slot<b.course)return 'booked';if(slot>=b.course&&slot<b.end)return 'cleaning';}return 'free';}
 function tm(s){const[h,m]=s.split(':').map(Number);return h*60+m;}
 function openM(rid,time){
 const room=allRooms.find(r=>r.id==rid);
-const sameStore=roomsOf(room.store_id);
-document.getElementById('mRoom').innerHTML=sameStore.map(r=>`<option value="${r.id}" ${r.id==rid?'selected':''}>${r.name}</option>`).join('');
-document.getElementById('msub').textContent=room.store_name+'（清掃時間は店舗設定に従います）';
+const openedFromHold=!!room.is_holding;
+// 部屋選択肢：通常は未振り分けを除外。未振り分けセルから開いたときだけ未振り分けも選べる
+const sameStore=roomsOf(room.store_id).filter(r=>!r.is_holding||openedFromHold);
+// 未振り分けを先頭・分かりやすいラベルに
+sameStore.sort((a,b)=>(b.is_holding?1:0)-(a.is_holding?1:0)||a.sort_order-b.sort_order);
+document.getElementById('mRoom').innerHTML=sameStore.map(r=>`<option value="${r.id}" ${r.id==rid?'selected':''}>${r.is_holding?'未振り分け（あとで部屋を決める）':r.name}</option>`).join('');
+document.getElementById('msub').textContent=room.store_name+(openedFromHold?'（未振り分けで受付：あとでドラッグして部屋へ）':'（清掃時間は店舗設定に従います）');
 document.getElementById('mTime').value=time;
 document.getElementById('cbtns').innerHTML=durations.map(d=>`<button class="course-btn" onclick="selC(this,${d.minutes})">${d.minutes}分</button>`).join('');
 selCourse=null;document.getElementById('cManual').value='';
@@ -348,10 +457,13 @@ function openTransfer(id){
 transferId=id;
 const b=lastBk.find(x=>x.id===id);
 if(!b)return;
-document.getElementById('transferSub').textContent=`${b.store_name||''} / ${b.start_at.slice(11,16)} 開始 / ${b.course_minutes}分 / 現在「${b.room_name}」（利用不可）`;
+const curRoom=allRooms.find(r=>r.id==b.room_id);
+const curLabel=curRoom&&curRoom.is_holding?'未振り分け':`「${b.room_name}」${b.room_blocked?'（利用不可）':''}`;
+document.getElementById('transferSub').textContent=`${b.store_name||''} / ${b.start_at.slice(11,16)} 開始 / ${b.course_minutes}分 / 現在 ${curLabel}`;
 document.getElementById('transferErr').style.display='none';
 const startMin=tm(b.start_at.slice(11,16));
-const candidates=allRooms.filter(r=>r.store_id==b.store_id&&r.id!=b.room_id);
+// 振替先候補：同店舗・自分以外・未振り分け以外（未振り分けへ戻すのはドラッグ or 一覧で足りる）
+const candidates=allRooms.filter(r=>r.store_id==b.store_id&&r.id!=b.room_id&&!r.is_holding);
 const html=candidates.map(r=>{
 let status,cls,disabled='';
 if(r.blocked){status='利用不可';cls='st-blocked';disabled='disabled';}
@@ -367,13 +479,88 @@ document.getElementById('transferRooms').innerHTML=html||'<div class="empty-msg"
 document.getElementById('transferMo').classList.add('open');
 }
 function closeTransfer(){document.getElementById('transferMo').classList.remove('open');}
-async function doTransfer(toRoomId){
-const res=await fetch(`/api/bookings/${transferId}/transfer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_room_id:toRoomId})});
+async function doTransfer(toRoomId,force){
+const res=await fetch(`/api/bookings/${transferId}/transfer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_room_id:toRoomId,force:!!force})});
 const d=await res.json();
-if(!res.ok){const e=document.getElementById('transferErr');e.textContent=d.error;e.style.display='block';return;}
-closeTransfer();load();
+if(res.ok){closeTransfer();load();return;}
+if(d.conflict){
+const msg=`「${d.to_room_name}」の ${d.conflict_label} と重なります${d.conflict_count>1?`（他${d.conflict_count-1}件も）`:''}。\nそれでもこの部屋へ移しますか？`;
+if(confirm(msg)){await doTransfer(toRoomId,true);}
+return;
+}
+const e=document.getElementById('transferErr');e.textContent=d.error;e.style.display='block';
 }
 document.getElementById('transferMo').addEventListener('click',e=>{if(e.target===document.getElementById('transferMo'))closeTransfer();});
+
+// ===== ドラッグで部屋へ振り分け =====
+let dragBid=null,dragStore=null;
+function setupBarDrag(){
+document.querySelectorAll('.bk-bar').forEach(bar=>{
+bar.addEventListener('dragstart',e=>{
+dragBid=Number(bar.dataset.bid);
+dragStore=Number(bar.dataset.store);
+bar.classList.add('dragging');
+try{e.dataTransfer.setData('text/plain',String(dragBid));e.dataTransfer.effectAllowed='move';}catch(_){}
+highlightDropTargets(dragBid,dragStore,true);
+});
+bar.addEventListener('dragend',()=>{
+bar.classList.remove('dragging');
+highlightDropTargets(dragBid,dragStore,false);
+document.querySelectorAll('.dragover-col').forEach(td=>td.classList.remove('dragover-col'));
+dragBid=null;dragStore=null;
+});
+});
+// 部屋列のセルをドロップ受付に（同店舗の部屋・未振り分けの両方）
+document.querySelectorAll('.roomcol').forEach(td=>{
+td.addEventListener('dragover',e=>{
+if(dragBid==null)return;
+const roomId=Number(td.dataset.room);
+const room=allRooms.find(r=>r.id===roomId);
+if(!room||Number(room.store_id)!==dragStore)return; // 別店舗へは不可
+e.preventDefault();e.dataTransfer.dropEffect='move';
+td.classList.add('dragover-col');
+});
+td.addEventListener('dragleave',()=>td.classList.remove('dragover-col'));
+td.addEventListener('drop',async e=>{
+e.preventDefault();
+td.classList.remove('dragover-col');
+if(dragBid==null)return;
+const roomId=Number(td.dataset.room);
+await dropToRoom(dragBid,roomId);
+});
+});
+}
+// ドロップ先候補（同店舗の部屋列頭）を色分け：空き=緑 / 埋まり=赤 / 利用不可=グレー
+function highlightDropTargets(bid,storeId,on){
+const b=lastBk.find(x=>x.id===bid);if(!b)return;
+const startMin=tm(b.start_at.slice(11,16));const end=startMin+b.course_minutes;
+document.querySelectorAll('.grid th[data-room]').forEach(th=>{
+th.classList.remove('drop-ok','drop-busy','drop-blocked');
+if(!on)return;
+const roomId=Number(th.dataset.room);
+if(Number(th.dataset.store)!==storeId)return;
+const room=allRooms.find(r=>r.id===roomId);if(!room)return;
+if(roomId===Number(b.room_id))return; // 今いる部屋には印を付けない
+if(room.blocked){th.classList.add('drop-blocked');return;}
+if(room.is_holding){th.classList.add('drop-ok');return;} // 未振り分けへ戻すのは常にOK
+const busy=lastBk.some(o=>o.room_id==roomId&&o.id!=bid&&overlaps(startMin,end,tm(o.start_at.slice(11,16)),tm(o.start_at.slice(11,16))+o.block_minutes));
+th.classList.add(busy?'drop-busy':'drop-ok');
+});
+}
+async function dropToRoom(bid,toRoomId,force){
+const b=lastBk.find(x=>x.id===bid);if(!b)return;
+if(Number(toRoomId)===Number(b.room_id))return; // 同じ部屋なら何もしない
+const res=await fetch(`/api/bookings/${bid}/transfer`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_room_id:toRoomId,force:!!force})});
+const d=await res.json();
+if(res.ok){load();return;}
+// 重なり → 確認してforce再送
+if(d.conflict){
+const msg=`「${d.to_room_name}」の ${d.conflict_label} と重なります${d.conflict_count>1?`（他${d.conflict_count-1}件も）`:''}。\nそれでもこの部屋へ移しますか？`;
+if(confirm(msg)){await dropToRoom(bid,toRoomId,true);}
+return;
+}
+alert(d.error||'振り分けできませんでした');
+}
 
 // ===== 予約 通知システム（新規/削除/変更を音で区別・マリンバ音色）=====
 const VOL=0.85;
