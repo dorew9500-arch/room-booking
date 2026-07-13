@@ -461,4 +461,127 @@ router.delete('/admin/durations/:id', requireAdmin, (req, res) => {
 
 function toMin(hhmm) { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; }
 
+// ============ チャット（予約者↔店舗）============
+// スレッドの単位は (partner_id, store_id, chat_date)。「その日のやり取り」で1本。
+// - partner: 自分(partner_id)が、指定store_idの店とやり取り
+// - reception: 自店(store_id固定)が、指定partner_idの予約者とやり取り
+// - admin: 任意の store_id × partner_id を指定して閲覧・送信
+
+function today() { return new Date().toISOString().slice(0, 10); }
+
+// リクエストから (partnerId, storeId, role, label) を解決。権限も判定。
+function resolveChatCtx(req) {
+  const u = req.session.user;
+  const date = (req.query.date || req.body?.date || today());
+  if (u.role === 'partner') {
+    const storeId = Number(req.query.store_id || req.body?.store_id);
+    if (!storeId) return { error: '店舗が指定されていません' };
+    return { partnerId: u.id, storeId, date, role: 'partner', label: u.code || '予約者', side: 'partner' };
+  }
+  if (u.role === 'reception') {
+    const partnerId = Number(req.query.partner_id || req.body?.partner_id);
+    if (!partnerId) return { error: '予約者が指定されていません' };
+    return { partnerId, storeId: u.store_id, date, role: 'reception', label: (u.store_name || '店舗') + '受付', side: 'store' };
+  }
+  if (u.role === 'admin') {
+    const storeId = Number(req.query.store_id || req.body?.store_id);
+    const partnerId = Number(req.query.partner_id || req.body?.partner_id);
+    if (!storeId || !partnerId) return { error: '店舗と予約者の指定が必要です' };
+    const st = queryOne('SELECT name FROM stores WHERE id = ?', [storeId]);
+    return { partnerId, storeId, date, role: 'admin', label: (st?.name || '店舗') + '管理', side: 'store' };
+  }
+  return { error: '権限がありません' };
+}
+
+// スレッドのメッセージ取得（同時に、自分側の未読を既読化）
+router.get('/chat/messages', requireLogin, (req, res) => {
+  const c = resolveChatCtx(req);
+  if (c.error) return res.status(400).json({ error: c.error });
+  const msgs = query(
+    'SELECT * FROM chat_messages WHERE partner_id = ? AND store_id = ? AND chat_date = ? ORDER BY id ASC',
+    [c.partnerId, c.storeId, c.date]
+  );
+  // 開いた側の未読を既読にする
+  if (c.side === 'partner') {
+    run('UPDATE chat_messages SET read_by_partner = 1 WHERE partner_id = ? AND store_id = ? AND chat_date = ? AND read_by_partner = 0', [c.partnerId, c.storeId, c.date]);
+  } else {
+    run('UPDATE chat_messages SET read_by_store = 1 WHERE partner_id = ? AND store_id = ? AND chat_date = ? AND read_by_store = 0', [c.partnerId, c.storeId, c.date]);
+  }
+  res.json(msgs.map(m => ({
+    id: m.id, body: m.body, sender_role: m.sender_role, sender_label: m.sender_label,
+    mine: m.sender_role === c.role || (c.side === 'store' && (m.sender_role === 'reception' || m.sender_role === 'admin')),
+    at: m.created_at
+  })));
+});
+
+// メッセージ送信
+router.post('/chat/messages', requireLogin, (req, res) => {
+  const c = resolveChatCtx(req);
+  if (c.error) return res.status(400).json({ error: c.error });
+  const body = (req.body.body || '').toString().trim();
+  if (!body) return res.status(400).json({ error: 'メッセージが空です' });
+  if (body.length > 500) return res.status(400).json({ error: 'メッセージが長すぎます（500文字まで）' });
+  // 送信側は既読、相手側は未読で入れる
+  const readP = c.side === 'partner' ? 1 : 0;
+  const readS = c.side === 'store' ? 1 : 0;
+  const r = run(
+    `INSERT INTO chat_messages (partner_id, store_id, chat_date, sender_role, sender_label, body, read_by_partner, read_by_store)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [c.partnerId, c.storeId, c.date, c.role, c.label, body, readP, readS]
+  );
+  res.json({ id: r.lastInsertRowid, message: '送信しました' });
+});
+
+// 未読サマリー（バッジ用）。ポーリングで叩く。
+// partner: 自分宛(店舗→自分)の未読を、店舗ごとに集計
+// reception: 自店宛(予約者→店舗)の未読を、予約者ごとに集計
+// admin: 店舗宛の未読を、store×partnerごとに集計
+router.get('/chat/unread', requireLogin, (req, res) => {
+  const u = req.session.user;
+  const date = req.query.date || today();
+  if (u.role === 'partner') {
+    const rows = query(
+      `SELECT store_id, COUNT(*) as cnt FROM chat_messages
+       WHERE partner_id = ? AND chat_date = ? AND sender_role IN ('reception','admin') AND read_by_partner = 0
+       GROUP BY store_id`, [u.id, date]);
+    return res.json({ total: rows.reduce((s, r) => s + r.cnt, 0), by: rows.map(r => ({ store_id: r.store_id, cnt: r.cnt })) });
+  }
+  if (u.role === 'reception') {
+    const rows = query(
+      `SELECT partner_id, COUNT(*) as cnt FROM chat_messages
+       WHERE store_id = ? AND chat_date = ? AND sender_role = 'partner' AND read_by_store = 0
+       GROUP BY partner_id`, [u.store_id, date]);
+    return res.json({ total: rows.reduce((s, r) => s + r.cnt, 0), by: rows.map(r => ({ partner_id: r.partner_id, cnt: r.cnt })) });
+  }
+  if (u.role === 'admin') {
+    const rows = query(
+      `SELECT store_id, partner_id, COUNT(*) as cnt FROM chat_messages
+       WHERE chat_date = ? AND sender_role = 'partner' AND read_by_store = 0
+       GROUP BY store_id, partner_id`, [date]);
+    return res.json({ total: rows.reduce((s, r) => s + r.cnt, 0), by: rows.map(r => ({ store_id: r.store_id, partner_id: r.partner_id, cnt: r.cnt })) });
+  }
+  res.json({ total: 0, by: [] });
+});
+
+// 受付・管理者が「今チャット相手になり得る予約者」の一覧（その日その店に予約がある予約者）
+router.get('/chat/partners', requireLogin, (req, res) => {
+  const u = req.session.user;
+  const date = req.query.date || today();
+  let storeId;
+  if (u.role === 'reception') storeId = u.store_id;
+  else if (u.role === 'admin') storeId = Number(req.query.store_id);
+  else return res.status(403).json({ error: '権限がありません' });
+  if (!storeId) return res.json([]);
+  // その日その店の予約から予約者を拾う＋既にチャットがある予約者も含める
+  const rows = query(
+    `SELECT DISTINCT p.id, p.code, p.name FROM partners p
+     WHERE p.id IN (
+       SELECT b.partner_id FROM bookings b JOIN rooms r ON b.room_id = r.id
+       WHERE r.store_id = ? AND substr(b.start_at,1,10) = ? AND b.partner_id IS NOT NULL
+       UNION
+       SELECT partner_id FROM chat_messages WHERE store_id = ? AND chat_date = ?
+     ) ORDER BY p.code`, [storeId, date, storeId, date]);
+  res.json(rows);
+});
+
 module.exports = router;
